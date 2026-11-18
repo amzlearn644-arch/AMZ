@@ -30,6 +30,18 @@
    uv run pywrangler deploy
    ```
 
+## انتقال دیتابیس محلی
+
+پس از دانلود مخزن روی رایانه‌ای که فایل SQLite محلی را دارد:
+
+```bash
+cd cloudflare
+python tools/export_sqlite_to_sql.py --db ../data/amz.sqlite3 --out import_catalog.sql
+npx wrangler d1 execute amz-catalog --remote --file=import_catalog.sql
+```
+
+فایل SQL خروجی شامل رکوردهای نرم‌افزار و وضعیت sync است، اما توکن‌های API را عمداً خالی می‌کند. بعد از انتقال، credentialها را جداگانه در محیط Cloudflare ثبت کن. فایل خروجی را عمومی یا commit نکن.
+
 ## API عمومی
 - GET /health
 - GET /api/software?q=firefox&os=Windows&limit=48&offset=0
