@@ -8,7 +8,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "amz-catalog",
-    "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+    "database_id": "66e015b4-4d84-4313-8f09-4cbc12bb1556",
     "migrations_dir": "./migrations"
   }],
   "triggers": {"crons": ["0 */6 * * *"]},
