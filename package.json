@@ -1,11 +1,11 @@
 {
   "name": "amz-cloudflare-worker",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Deployment tooling for the AMZ Cloudflare Worker",
   "scripts": {
-    "deploy": "wrangler deploy --config ./wrangler.toml",
-    "cf:validate": "wrangler deploy --dry-run --outdir ./.wrangler-dry-run --config ./wrangler.toml"
+    "deploy": "wrangler deploy --config ./wrangler.toml --compatibility-date=2026-11-17",
+    "cf:validate": "wrangler deploy --dry-run --outdir ./.wrangler-dry-run --config ./wrangler.toml --compatibility-date=2026-11-17"
   },
   "devDependencies": {
     "wrangler": "4.165.0"
