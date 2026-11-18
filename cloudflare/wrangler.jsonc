@@ -9,7 +9,7 @@
     "binding": "DB",
     "database_name": "amz-catalog",
     "database_id": "REPLACE_WITH_D1_DATABASE_ID",
-    "migrations_dir": "migrations"
+    "migrations_dir": "./migrations"
   }],
   "triggers": {"crons": ["0 */6 * * *"]},
   "observability": {"enabled": true}
