@@ -230,7 +230,11 @@ async def _set_state(db: Any, provider: str, status: str, message: str, success:
 
 
 async def _upsert(db: Any, item: dict[str, Any]) -> None:
-    # Stable source identity is the conflict key; a failed fetch never deletes old rows.
+    # Avoid slug collisions across independent feeds while preserving stable source identity.
+    collision = await db.prepare("SELECT source,source_id FROM software WHERE slug=?").bind(item["slug"]).first()
+    if collision and (str(collision.source), str(collision.source_id)) != (item["source"], item["source_id"]):
+        item["slug"] = (_slug(item["source"])[:35] + "-" + item["slug"])[:180]
+    # A failed fetch never deletes old rows.
     await db.prepare(
         "INSERT INTO software(slug,name,summary,description,category,os,version,icon_url,homepage_url,download_url,source,source_id,updated_at) "
         "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) "
