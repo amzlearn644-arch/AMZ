@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f2">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ورود به پنل مدیریت — AMZ</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body class="admin-body admin-login-body">
+  <main class="admin-login">
+    <a class="brand admin-login-brand" href="/"><span class="brand-mark">a</span><span>amz<span class="brand-dot">.</span></span></a>
+    <div class="admin-login-card">
+      <span class="eyebrow"><span class="eyebrow-line"></span> محدودهٔ مدیریت</span>
+      <h1>ورود به پنل</h1>
+      {% if not enabled %}
+        <p class="admin-login-text">پنل مدیریت هنوز فعال نیست. برای فعال‌سازی، در فایل <code>.env</code> یک رمز عبور تنظیم کنید و برنامه را دوباره اجرا کنید:</p>
+        <pre class="admin-code">AMZ_ADMIN_PASSWORD=یک-رمز-دلخواه</pre>
+        <p class="admin-login-hint">این پنل فقط از همین دستگاه و روی آدرس محلی در دسترس است.</p>
+      {% else %}
+        <p class="admin-login-text">برای مدیریت کاتالوگ، رمز عبور مدیر را وارد کنید.</p>
+        {% if error %}<div class="admin-alert">{{ error }}</div>{% endif %}
+        <form method="post" action="/admin/login" class="admin-login-form">
+          <input type="hidden" name="next" value="{{ next }}">
+          <label for="password">رمز عبور</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+          <button type="submit">ورود به پنل <span>↙</span></button>
+        </form>
+        <p class="admin-login-hint">نشست شما تا ۱۲ ساعت فعال می‌ماند. برای بستن آن، از بالای پنل خارج شوید.</p>
+      {% endif %}
+    </div>
+    <a class="admin-login-back" href="/">↗ بازگشت به سایت</a>
+  </main>
+</body>
+</html>

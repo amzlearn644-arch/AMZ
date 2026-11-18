@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6f2">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}پنل مدیریت{% endblock %} — AMZ</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body class="admin-body">
+<header class="topbar admin-topbar">
+  <a class="brand" href="/" aria-label="صفحهٔ اصلی AMZ"><span class="brand-mark">a</span><span>amz<span class="brand-dot">.</span></span></a>
+  <nav class="toplinks" aria-label="پیمایش پنل"><a href="/">مشاهدهٔ سایت</a><a href="/admin">پنل مدیریت</a></nav>
+  <form class="admin-logout" method="post" action="/admin/logout"><button type="submit">خروج <span>↗</span></button></form>
+</header>
+<div class="admin-shell">
+  <aside class="admin-nav" aria-label="بخش‌های مدیریت">
+    <span class="admin-nav-label">مدیریت کاتالوگ</span>
+    <a class="{% if active == 'dashboard' %}active{% endif %}" href="/admin"><span>◫</span> داشبورد</a>
+    <a class="{% if active == 'software' %}active{% endif %}" href="/admin/software"><span>▤</span> نرم‌افزارها</a>
+    <a class="{% if active == 'new' %}active{% endif %}" href="/admin/software/new"><span>＋</span> افزودن نرم‌افزار</a>
+    <a class="{% if active == 'apis' %}active{% endif %}" href="/admin/apis"><span>⇄</span> منابع API</a>
+    <form method="post" action="/admin/sync"><button type="submit"><span>↻</span> همگام‌سازی منابع</button></form>
+    <p class="admin-nav-note">فقط از همین دستگاه در دسترس است.</p>
+  </aside>
+  <main class="admin-content">
+    {% if request.query_params.get('saved') %}<div class="admin-flash">تغییرات ذخیره شد.</div>{% endif %}
+    {% if request.query_params.get('deleted') %}<div class="admin-flash">نرم‌افزار حذف شد.</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

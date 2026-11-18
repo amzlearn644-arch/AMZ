@@ -1,0 +1,68 @@
+{% extends "admin_base.html" %}
+{% block title %}داشبورد{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+  <div><span class="eyebrow"><span class="eyebrow-line"></span> نمای کلی</span><h1>داشبورد</h1><p>وضعیت کاتالوگ و منابع همگام‌سازی، در یک نگاه.</p></div>
+  <div class="admin-head-actions"><a class="admin-button" href="/admin/apis">⇄ مدیریت APIها</a><a class="admin-button primary" href="/admin/software/new">＋ افزودن نرم‌افزار</a></div>
+</div>
+
+{% if sync_message == 'done' %}<div class="admin-flash">همگام‌سازی اجرا شد؛ نتیجهٔ هر منبع را پایین‌تر ببینید.</div>{% endif %}
+{% if sync_message == 'busy' %}<div class="admin-alert">یک همگام‌سازی دیگر در حال اجراست؛ کمی بعد دوباره تلاش کنید.</div>{% endif %}
+
+<div class="admin-stats">
+  <div class="admin-stat"><span>نرم‌افزار</span><b>{{ stats.total }}</b><small>مورد در کاتالوگ</small></div>
+  <div class="admin-stat"><span>سیستم‌عامل</span><b>{{ stats.systems }}</b><small>سیستم‌عامل متمایز</small></div>
+  <div class="admin-stat"><span>دسته‌بندی</span><b>{{ stats.categories }}</b><small>دستهٔ فعال</small></div>
+  <div class="admin-stat"><span>منبع</span><b>{{ stats.sources }}</b><small>منبع اطلاعاتی</small></div>
+</div>
+
+<section class="admin-panel">
+  <div class="admin-panel-head"><h2>آخرین تغییرات</h2><a href="/admin/software">همهٔ نرم‌افزارها ↙</a></div>
+  {% if recent %}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>نام</th><th>سیستم‌عامل</th><th>دسته</th><th>منبع</th><th>به‌روزرسانی (UTC)</th><th></th></tr></thead>
+      <tbody>
+        {% for item in recent %}
+        <tr>
+          <td><div class="admin-item"><span class="admin-letter tone-{{ loop.index0 % 6 }}">{{ item.name[:1] }}</span><div><b>{{ item.name }}</b><small dir="ltr">/software/{{ item.slug }}</small></div></div></td>
+          <td>{{ item.os }}</td>
+          <td>{{ item.category }}</td>
+          <td>{{ item.source }}</td>
+          <td class="admin-mono">{{ item.updated_at[:16] }}</td>
+          <td class="admin-row-actions"><a href="/admin/software/{{ item.slug }}/edit">ویرایش</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="admin-empty">هنوز نرم‌افزاری در کاتالوگ نیست. <a href="/admin/software/new">اولین مورد را اضافه کنید.</a></p>
+  {% endif %}
+</section>
+
+<section class="admin-panel">
+  <div class="admin-panel-head"><h2>وضعیت منابع</h2><span class="admin-mono">آخرین موفقیت: {{ last_sync[:16] ~ ' UTC' if last_sync else 'هنوز اجرا نشده' }}</span></div>
+  {% if states %}
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>منبع</th><th>وضعیت</th><th>آخرین تلاش (UTC)</th><th>آخرین موفقیت (UTC)</th><th>پیام</th></tr></thead>
+      <tbody>
+        {% for state in states %}
+        <tr>
+          <td><b>{{ state.provider }}</b></td>
+          <td><span class="admin-badge {{ state.status }}">{{ {'ok': 'موفق', 'error': 'خطا'}.get(state.status, 'بی‌کار') }}</span></td>
+          <td class="admin-mono">{{ state.last_attempt[:16] or '—' }}</td>
+          <td class="admin-mono">{{ state.last_success[:16] or '—' }}</td>
+          <td class="admin-message">{{ state.message or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="admin-empty">هنوز منبعی فعال نشده است. از بخش <a href="/admin/apis">منابع API</a> یک feed معتبر ثبت کنید.</p>
+  {% endif %}
+  <form method="post" action="/admin/sync" class="admin-inline-form"><button class="admin-button" type="submit">↻ اجرای همگام‌سازی</button><a class="admin-button" href="/admin/apis">＋ افزودن یا مدیریت API</a><span>منابع غیرفعال نادیده گرفته می‌شوند؛ دادهٔ فعلی کاتالوگ حفظ می‌شود.</span></form>
+</section>
+{% endblock %}

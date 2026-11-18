@@ -1,0 +1,63 @@
+{% extends "admin_base.html" %}
+{% block title %}{{ 'ویرایش ' ~ values.name if editing else 'افزودن نرم‌افزار' }}{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+  <div>
+    <span class="eyebrow"><span class="eyebrow-line"></span> {{ 'ویرایش مورد' if editing else 'مورد جدید' }}</span>
+    <h1>{{ 'ویرایش ' ~ values.name if editing else 'افزودن نرم‌افزار' }}</h1>
+    <p>اطلاعات متادیتا را وارد کنید. لینک دانلود باید مستقیم به منبع اصلی برود.</p>
+  </div>
+  <a class="admin-button" href="/admin/software">→ بازگشت به فهرست</a>
+</div>
+
+{% if errors %}
+<div class="admin-alert">
+  <b>ذخیره نشد:</b>
+  <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if editing and item.source != 'AMZ' %}
+<div class="admin-note">این مورد از منبع «{{ item.source }}» همگام شده است. تغییرات دستی ممکن است در همگام‌سازی بعدی بازنویسی شوند.</div>
+{% endif %}
+
+<form method="post" action="{{ '/admin/software/' ~ original_slug ~ '/edit' if editing else '/admin/software/new' }}" class="admin-form">
+  <div class="admin-form-grid">
+    <label>نام نرم‌افزار <span>*</span><input name="name" value="{{ values.name }}" maxlength="180" required autofocus></label>
+    <label>نشانی (slug) <span>*</span><input name="slug" value="{{ values.slug }}" maxlength="80" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" dir="ltr" placeholder="my-app"><small>فقط حروف کوچک انگلیسی، عدد و خط تیره؛ بخشی از آدرس صفحهٔ نرم‌افزار.</small></label>
+  </div>
+
+  <div class="admin-form-grid three">
+    <label>دسته‌بندی<input name="category" value="{{ values.category }}" maxlength="80" list="admin-categories"></label>
+    <label>سیستم‌عامل<input name="os" value="{{ values.os }}" maxlength="120" list="admin-systems" placeholder="Windows, macOS"><small>چند مورد را با کاما جدا کنید.</small></label>
+    <label>نسخه<input name="version" value="{{ values.version }}" maxlength="80" dir="ltr" placeholder="1.0.0"></label>
+  </div>
+
+  <label>توضیح کوتاه<input name="summary" value="{{ values.summary }}" maxlength="500" placeholder="یک جمله دربارهٔ کاربرد نرم‌افزار"></label>
+  <label>توضیحات کامل<textarea name="description" rows="5" maxlength="4000" placeholder="توضیح کامل‌تر، بدون تبلیغات اضافه...">{{ values.description }}</textarea></label>
+
+  <div class="admin-form-divider"><span>لینک‌ها</span></div>
+
+  <div class="admin-form-grid three">
+    <label>وب‌سایت رسمی<input name="homepage_url" value="{{ values.homepage_url }}" type="url" dir="ltr" placeholder="https://example.org/"><small>فقط HTTPS.</small></label>
+    <label>لینک دانلود مستقیم<input name="download_url" value="{{ values.download_url }}" type="url" dir="ltr" placeholder="https://example.org/download"><small>مستقیم به منبع اصلی؛ فایل روی AMZ ذخیره نمی‌شود.</small></label>
+    <label>نشانی آیکن<input name="icon_url" value="{{ values.icon_url }}" type="url" dir="ltr" placeholder="https://example.org/icon.png"><small>اختیاری و فقط HTTPS.</small></label>
+  </div>
+
+  <div class="admin-form-actions">
+    <button class="admin-button primary" type="submit">{{ 'ذخیرهٔ تغییرات' if editing else 'افزودن به کاتالوگ' }} <span>↙</span></button>
+    <a class="admin-button" href="/admin/software">انصراف</a>
+    {% if editing %}<a class="admin-preview-link" href="/software/{{ original_slug }}" target="_blank" rel="noopener">پیش‌نمایش صفحه ↗</a>{% endif %}
+  </div>
+</form>
+
+{% if editing %}
+<form method="post" action="/admin/software/{{ original_slug }}/delete" class="admin-danger-zone" onsubmit="return confirm('این نرم‌افزار حذف شود؟ این کار قابل بازگشت نیست.');">
+  <div><b>حذف نرم‌افزار</b><span>این مورد از کاتالوگ حذف می‌شود؛ اگر از یک منبع همگام‌سازی شده باشد، ممکن است در sync بعدی بازگردد.</span></div>
+  <button type="submit" class="admin-button danger">حذف</button>
+</form>
+{% endif %}
+
+<datalist id="admin-categories">{% for category in categories %}<option value="{{ category }}">{% endfor %}</datalist>
+<datalist id="admin-systems">{% for system in systems %}<option value="{{ system }}">{% endfor %}</datalist>
+{% endblock %}

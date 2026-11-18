@@ -1,0 +1,35 @@
+# Python bytecode and test/type-check caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# Local databases and generated runtime data
+data/*.sqlite3
+data/*.sqlite3-shm
+data/*.sqlite3-wal
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Editor/OS temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

@@ -1,0 +1,27 @@
+{% extends "admin_base.html" %}
+{% block title %}منابع API{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+  <div><span class="eyebrow"><span class="eyebrow-line"></span> همگام‌سازی کاتالوگ</span><h1>منابع API</h1><p>فیدهای JSON معتبر را ثبت کنید تا مشخصات نرم‌افزارها به کاتالوگ اضافه شوند.</p></div>
+  <a class="admin-button primary" href="/admin/apis/new">＋ افزودن API</a>
+</div>
+{% if sync_message == 'done' %}<div class="admin-flash">همگام‌سازی اجرا شد؛ وضعیت هر منبع در داشبورد قابل مشاهده است.</div>{% endif %}
+{% if request.query_params.get('saved') %}<div class="admin-flash">تنظیمات API ذخیره شد.</div>{% endif %}
+{% if sync_message == 'busy' %}<div class="admin-alert">همگام‌سازی دیگری در حال اجراست.</div>{% endif %}
+{% if request.query_params.get('deleted') %}<div class="admin-flash">منبع API حذف شد.</div>{% endif %}
+<div class="admin-note">فقط APIهایی را اضافه کنید که مجاز به استفاده از آن‌ها هستید. پاسخ باید JSON و شامل فهرست برنامه‌ها باشد؛ AMZ اطلاعات را نگه می‌دارد و فایل نصبی را دریافت یا میزبانی نمی‌کند.</div>
+<section class="admin-panel">
+  <div class="admin-panel-head"><h2>APIهای ثبت‌شده</h2><span class="admin-mono">{{ sources|length }} منبع</span></div>
+  {% if sources %}
+  <div class="admin-table-wrap"><table class="admin-table">
+    <thead><tr><th>نام</th><th>نشانی endpoint</th><th>مسیر داده</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+    <tbody>{% for source in sources %}
+      <tr><td><b>{{ source.name }}</b></td><td class="admin-mono" dir="ltr">{{ source.url }}</td><td class="admin-mono" dir="ltr">{{ source.records_path }}</td>
+      <td>{% set state = states|selectattr('provider', 'equalto', source.name)|first %}{% if state %}<span class="admin-badge {{ state.status }}">{{ {'ok':'موفق','error':'خطا'}.get(state.status, 'بی‌کار') }}</span>{% else %}<span class="admin-badge">آماده</span>{% endif %}</td>
+      <td class="admin-row-actions"><a href="/admin/apis/{{ source.id }}/edit">ویرایش</a><form method="post" action="/admin/apis/{{ source.id }}/sync"><button type="submit">همگام‌سازی</button></form><form method="post" action="/admin/apis/{{ source.id }}/delete" onsubmit="return confirm('این منبع حذف شود؟');"><button type="submit">حذف</button></form></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="admin-empty">هنوز APIای ثبت نشده است. برای شروع، یک JSON feed معتبر اضافه کنید.</p>{% endif %}
+</section>
+<section class="admin-panel"><div class="admin-panel-head"><h2>قالب متوقع JSON</h2></div><pre class="admin-code">{"items":[{"id":"app-1","name":"Example","summary":"...","description":"...","category":"Tools","os":"Windows","version":"1.0","icon_url":"https://...","homepage_url":"https://...","download_url":"https://..."}]}</pre><p class="admin-empty">برای پاسخ‌هایی با ساختار متفاوت، مسیر فهرست و نگاشت فیلدها را در فرم تنظیم کنید. هر فیلد اختیاری به‌جز شناسه و نام است.</p></section>
+{% endblock %}

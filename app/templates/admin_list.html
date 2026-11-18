@@ -1,0 +1,55 @@
+{% extends "admin_base.html" %}
+{% block title %}نرم‌افزارها{% endblock %}
+{% block content %}
+<div class="admin-page-head">
+  <div><span class="eyebrow"><span class="eyebrow-line"></span> کاتالوگ</span><h1>نرم‌افزارها</h1><p>{{ total }} مورد ثبت شده است.</p></div>
+  <a class="admin-button primary" href="/admin/software/new">＋ افزودن نرم‌افزار</a>
+</div>
+
+<div class="admin-toolbar">
+  <form class="admin-search" method="get" action="/admin/software" role="search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
+    <input name="q" value="{{ q }}" type="search" placeholder="جست‌وجو در نام، خلاصه و توضیحات" aria-label="جست‌وجوی نرم‌افزار">
+    <button type="submit">جست‌وجو</button>
+  </form>
+  {% if q %}<a class="admin-clear" href="/admin/software">پاک‌کردن جست‌وجو</a>{% endif %}
+</div>
+
+{% if items %}
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>نام</th><th>سیستم‌عامل</th><th>دسته</th><th>منبع</th><th>به‌روزرسانی (UTC)</th><th>عملیات</th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td><div class="admin-item"><span class="admin-letter tone-{{ loop.index0 % 6 }}">{{ item.name[:1] }}</span><div><b>{{ item.name }}</b><small dir="ltr">/software/{{ item.slug }}</small></div></div></td>
+        <td>{{ item.os }}</td>
+        <td>{{ item.category }}</td>
+        <td>{{ item.source }}</td>
+        <td class="admin-mono">{{ item.updated_at[:16] }}</td>
+        <td class="admin-row-actions">
+          <a href="/admin/software/{{ item.slug }}/edit">ویرایش</a>
+          <form method="post" action="/admin/software/{{ item.slug }}/delete" onsubmit="return confirm('این نرم‌افزار حذف شود؟ این کار قابل بازگشت نیست.');"><button type="submit" class="danger">حذف</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if pages > 1 %}
+<nav class="admin-pagination" aria-label="صفحه‌بندی">
+  {% if page > 1 %}<a href="/admin/software?q={{ q|urlencode }}&page={{ page - 1 }}">→ صفحهٔ قبل</a>{% else %}<span>→ صفحهٔ قبل</span>{% endif %}
+  <b>صفحهٔ {{ page }} از {{ pages }}</b>
+  {% if page < pages %}<a href="/admin/software?q={{ q|urlencode }}&page={{ page + 1 }}">صفحهٔ بعد ←</a>{% else %}<span>صفحهٔ بعد ←</span>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="admin-empty-block">
+  <div class="admin-empty-symbol">⌕</div>
+  <h2>{% if q %}نتیجه‌ای پیدا نشد.{% else %}کاتالوگ هنوز خالی است.{% endif %}</h2>
+  <p>{% if q %}عبارت دیگری را امتحان کنید یا فیلتر را پاک کنید.{% else %}با افزودن اولین نرم‌افزار شروع کنید.{% endif %}</p>
+  <a class="admin-button primary" href="/admin/software/new">＋ افزودن نرم‌افزار</a>
+</div>
+{% endif %}
+{% endblock %}
