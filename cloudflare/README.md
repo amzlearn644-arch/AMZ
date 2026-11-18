@@ -13,7 +13,7 @@
 2. مقدار database_id در wrangler.jsonc را با شناسه واقعی جایگزین کن.
 3. از ریشه مخزن اجرا کن:
    ```bash
-   npx wrangler d1 execute amz-catalog --remote --file=cloudflare/schema.sql
+   npx wrangler d1 migrations apply amz-catalog --remote
    ```
 4. توکن مدیریت را ثبت کن:
    ```bash
