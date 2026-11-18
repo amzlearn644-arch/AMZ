@@ -1,0 +1,25 @@
+name: Cloudflare catalog checks
+on:
+  push:
+    branches: [cloudflare-workers]
+  pull_request:
+    branches: [main]
+    paths:
+      - "cloudflare/**"
+jobs:
+  syntax-and-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Python syntax
+        run: python -m compileall -q cloudflare/src
+      - name: Check JavaScript syntax
+        run: node --check cloudflare/public/app.js && node --check cloudflare/public/admin.js
+      - name: Validate D1 migration with SQLite
+        run: python -c "import sqlite3,pathlib; c=sqlite3.connect(':memory:'); c.executescript(pathlib.Path('cloudflare/migrations/0001_init.sql').read_text()); print('D1 schema SQL OK')"

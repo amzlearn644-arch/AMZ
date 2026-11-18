@@ -1,0 +1,13 @@
+{
+  "name": "amz-cloudflare-worker",
+  "private": true,
+  "version": "1.1.4",
+  "description": "Deployment tooling for the AMZ Cloudflare Worker",
+  "scripts": {
+    "deploy": "uvx --from workers-py pywrangler deploy --config ./wrangler.toml --compatibility-date=2026-04-20",
+    "cf:validate": "uvx --from workers-py pywrangler deploy --dry-run --outdir ./.wrangler-dry-run --config ./wrangler.toml --compatibility-date=2026-04-20"
+  },
+  "devDependencies": {
+    "wrangler": "4.165.0"
+  }
+}
