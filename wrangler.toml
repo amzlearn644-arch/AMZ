@@ -1,7 +1,7 @@
 name = "amz"
 main = "cloudflare/src/entry.py"
 compatibility_date = "2026-11-17"
-compatibility_flags = ["python_workers"]
+compatibility_flags = ["python_workers", "disable_python_external_sdk"]
 
 [assets]
 directory = "./cloudflare/public"
