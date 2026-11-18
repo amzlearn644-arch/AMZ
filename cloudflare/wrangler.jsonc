@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
-  "name": "amz-catalog",
+  "name": "amz",
   "main": "src/entry.py",
   "compatibility_date": "2026-11-19",
   "compatibility_flags": ["python_workers"],
