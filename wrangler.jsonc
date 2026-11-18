@@ -2,8 +2,8 @@
   "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
   "name": "amz",
   "main": "cloudflare/src/entry.py",
-  "compatibility_date": "2026-11-17",
-  "compatibility_flags": ["python_workers", "disable_python_external_sdk"],
+  "compatibility_date": "2026-04-20",
+  "compatibility_flags": ["python_workers"],
   "assets": {
     "directory": "./cloudflare/public",
     "binding": "ASSETS",
