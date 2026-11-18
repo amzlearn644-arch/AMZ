@@ -173,7 +173,9 @@ class Default(WorkerEntrypoint):
 
             return json_response({"error": "not_found"}, 404)
 
-        if path == "/admin" or path == "/admin/":
+        if path == "/admin":
+            return Response("", status=302, headers={"Location": "/admin/"})
+        if path == "/admin/":
             try:
                 return await self.env.ASSETS.fetch(request)
             except Exception:
