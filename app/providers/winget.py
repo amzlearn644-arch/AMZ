@@ -102,7 +102,7 @@ class WingetProvider:
                 version = self._latest_version([str(row.get("name", "")) for row in versions or [] if isinstance(row, dict) and row.get("type") == "dir"])
                 if not version:
                     continue
-                version_url = f"{package_dir.get('url', '').rstrip('/')}/{quote(version)}"
+                version_url = f"{package_dir.get('url', '').split('?', 1)[0].rstrip('/')}/{quote(version)}?ref=master"
                 files = await get_json(version_url)
                 locale = next((row for row in files or [] if isinstance(row, dict) and row.get("name", "").lower().endswith(".locale.en-us.yaml")), None)
                 if not locale:
