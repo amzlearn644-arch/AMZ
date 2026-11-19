@@ -97,13 +97,16 @@ async def sync_loop() -> None:
         total = db.list_software(limit=1)[1]
         windows = db.list_software(os_name="Windows", limit=1)[1]
         android = db.list_software(os_name="Android", limit=1)[1]
+        unique_counts = db.catalog_unique_counts()
         provider_summary = ", ".join(
             f"{item.get('provider')}={item.get('count', 0)}"
             for item in result.get("providers", [])
         )
         logger.warning(
-            "AMZ catalog status=%s total=%d Windows=%d Android=%d providers=[%s]",
-            result.get("status"), total, windows, android, provider_summary,
+            "AMZ catalog status=%s total=%d Windows=%d Android=%d Windows_unique=%d Android_unique=%d combined_unique=%d providers=[%s]",
+            result.get("status"), total, windows, android,
+            unique_counts["windows_unique"], unique_counts["android_unique"],
+            unique_counts["combined_unique"], provider_summary,
         )
     except Exception:
         logger.exception("AMZ initial catalog status check failed")
