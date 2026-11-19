@@ -12,6 +12,15 @@ def configured_providers():
     providers = [WingetProvider(), ScoopProvider(), HomebrewProvider()]
     if os.getenv("AMZ_ENABLE_FDROID", "1") == "1":
         providers.append(FdroidProvider())
+    if os.getenv("AMZ_ENABLE_FDROID_ARCHIVE", "1") == "1":
+        providers.append(FdroidProvider(
+            name="F-Droid Archive",
+            index_url=os.getenv(
+                "FDROID_ARCHIVE_INDEX_URL",
+                "https://f-droid.org/archive/index-v1.json",
+            ),
+            max_items=int(os.getenv("FDROID_ARCHIVE_MAX_ITEMS", "1000000")),
+        ))
     if os.getenv("AMZ_ENABLE_IZZY", "1") == "1":
         providers.append(FdroidProvider(
             name="IzzyOnDroid",
