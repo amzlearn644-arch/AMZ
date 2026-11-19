@@ -14,7 +14,7 @@ class ScoopProvider:
     name = "Scoop"
     API_URL = "https://api.github.com/repos/ScoopInstaller/Main/contents/bucket"
     RAW_BASE = "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/"
-    MAX_ITEMS = 300
+    MAX_ITEMS = int(os.getenv("SCOOP_MAX_ITEMS", "100000"))
 
     @staticmethod
     def _text(value: Any, limit: int = 500) -> str:
