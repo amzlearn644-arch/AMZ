@@ -169,5 +169,5 @@ async def health():
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/static/favicon.svg", status_code=307)
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="#3f6848"/><path d="M44 20H30c-9 0-14 5-14 13s5 13 14 13h14V20zm-9 18h-5c-4 0-6-2-6-5s2-5 6-5h5v10z" fill="#fff"/></svg>'
+    return Response(content=svg, media_type="image/svg+xml")
