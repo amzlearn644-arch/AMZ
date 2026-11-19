@@ -61,10 +61,11 @@ async def home(
     page: int = Query(1, ge=1, le=100000),
 ):
     per_page = 36
-    items, total = db.list_software(q, os, category, limit=per_page, offset=(page - 1) * per_page)
-    categories, systems = db.get_facets()
+    _, total = db.list_software(q, os, category, limit=1, offset=0)
     page_count = max(1, (total + per_page - 1) // per_page)
     page = min(page, page_count)
+    items, _ = db.list_software(q, os, category, limit=per_page, offset=(page - 1) * per_page)
+    categories, systems = db.get_facets()
     return templates.TemplateResponse(
         request=request,
         name="index.html",
