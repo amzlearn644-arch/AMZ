@@ -383,3 +383,24 @@ def delete_api_source(source_id: int) -> bool:
     with connection() as conn:
         cursor = conn.execute("DELETE FROM api_sources WHERE id = ?", (source_id,))
     return cursor.rowcount > 0
+
+
+def catalog_unique_counts() -> dict[str, int]:
+    """Return conservative distinct application counts across the two target OSes."""
+    with connection() as conn:
+        windows = conn.execute(
+            """
+            SELECT COUNT(DISTINCT lower(trim(name)))
+            FROM software
+            WHERE lower(os) LIKE '%windows%'
+            """
+        ).fetchone()[0]
+        android = conn.execute(
+            """
+            SELECT COUNT(DISTINCT lower(trim(source_id)))
+            FROM software
+            WHERE lower(os) = 'android' AND trim(source_id) <> ''
+            """
+        ).fetchone()[0]
+        total = int(windows or 0) + int(android or 0)
+        return {"windows_unique": int(windows or 0), "android_unique": int(android or 0), "combined_unique": total}
