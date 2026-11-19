@@ -60,9 +60,6 @@ class WingetProvider:
         github_token = os.getenv("GITHUB_TOKEN", "").strip()
         if github_token:
             headers["Authorization"] = f"Bearer {github_token}"
-        token = __import__("os").getenv("GITHUB_TOKEN", "").strip()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
         timeout = httpx.Timeout(12.0, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=headers) as client:
             requests = 0
