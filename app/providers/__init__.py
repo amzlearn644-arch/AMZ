@@ -1,5 +1,6 @@
 from .fdroid import FdroidProvider
 from .json_feed import JsonFeedProvider
+from .homebrew import HomebrewProvider
 from .scoop import ScoopProvider
 from .winget import WingetProvider
 
@@ -8,7 +9,7 @@ def configured_providers():
     """Return the public metadata catalogs enabled for AMZ."""
     import os
 
-    providers = [WingetProvider(), ScoopProvider()]
+    providers = [WingetProvider(), ScoopProvider(), HomebrewProvider()]
     if os.getenv("AMZ_ENABLE_FDROID", "1") == "1":
         providers.append(FdroidProvider())
     if os.getenv("AMZ_ENABLE_IZZY", "1") == "1":
