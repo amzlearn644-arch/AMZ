@@ -23,8 +23,6 @@ templates = Jinja2Templates(directory=APP_DIR / "templates")
 
 COOKIE_NAME = "amz_admin"
 SESSION_SECONDS = 12 * 60 * 60
-LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
-LOCAL_REQUEST_HOSTS = {"127.0.0.1", "::1", "localhost", "testserver"}
 MAX_FORM_BYTES = 64_000
 SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
@@ -72,9 +70,10 @@ def _request_hostname(request: Request) -> str:
 
 
 def _require_local(request: Request) -> None:
-    client_host = request.client.host if request.client else ""
-    if client_host not in LOCAL_HOSTS:
-        raise HTTPException(status_code=403, detail="پنل مدیریت فقط از همین دستگاه در دسترس است.")
+    # Remote access is allowed only through the password-protected admin routes.
+    # HTTPS is enforced by the hosting platform (Render).
+    if request.url.scheme != "https" and (request.url.hostname or "").endswith("onrender.com"):
+        raise HTTPException(status_code=400, detail="اتصال امن HTTPS الزامی است.")
 
 
 def _guard(request: Request) -> None:
@@ -87,21 +86,20 @@ def _guard(request: Request) -> None:
 
 
 def _check_origin(request: Request) -> None:
-    """Reject cross-site browser posts; clients without Origin still require a local host."""
+    """Reject cross-site browser posts by requiring the Origin host to match this site."""
     origin = request.headers.get("origin")
-    host = (request.headers.get("host") or "").split(":", 1)[0].strip("[]").lower()
-    if host not in LOCAL_REQUEST_HOSTS:
-        raise HTTPException(status_code=403, detail="درخواست فقط به سرویس محلی پذیرفته می‌شود.")
-    if origin:
-        parsed = urlparse(origin)
-        origin_host = (parsed.hostname or "").lower()
-        if (
-            parsed.scheme not in {"http", "https"}
-            or origin_host not in LOCAL_REQUEST_HOSTS
-            or origin_host != host
-            or parsed.netloc.lower() != (request.headers.get("host") or "").lower()
-        ):
-            raise HTTPException(status_code=403, detail="درخواست از منبع دیگر رد شد.")
+    if not origin:
+        raise HTTPException(status_code=403, detail="سرآیند امنیتی درخواست موجود نیست.")
+    parsed = urlparse(origin)
+    request_host = (request.headers.get("host") or "").lower()
+    origin_host = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme != "https"
+        or not origin_host
+        or parsed.netloc.lower() != request_host
+        or origin_host != (urlparse("//" + request_host).hostname or "").lower()
+    ):
+        raise HTTPException(status_code=403, detail="درخواست از مبدأ نامعتبر رد شد.")
 
 
 def _safe_next(value: str) -> str:
@@ -203,7 +201,7 @@ async def login(request: Request):
     response = RedirectResponse(next_path, status_code=303)
     response.set_cookie(
         COOKIE_NAME, issue_token(), max_age=SESSION_SECONDS,
-        httponly=True, samesite="strict", path="/admin",
+        httponly=True, secure=True, samesite="strict", path="/admin",
     )
     return response
 
