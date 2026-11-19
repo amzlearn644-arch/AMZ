@@ -11,6 +11,19 @@
 {% if request.query_params.get('deleted') %}<div class="admin-flash">منبع API حذف شد.</div>{% endif %}
 <div class="admin-note">فقط APIهایی را اضافه کنید که مجاز به استفاده از آن‌ها هستید. پاسخ باید JSON و شامل فهرست برنامه‌ها باشد؛ AMZ اطلاعات را نگه می‌دارد و فایل نصبی را دریافت یا میزبانی نمی‌کند.</div>
 <section class="admin-panel">
+  <div class="admin-panel-head"><h2>منابع داخلی AMZ</h2><span class="admin-mono">{{ builtin_providers|length }} منبع</span></div>
+  <div class="admin-table-wrap"><table class="admin-table">
+    <thead><tr><th>منبع</th><th>آدرس کاتالوگ</th><th>وضعیت</th><th>آخرین پیام</th></tr></thead>
+    <tbody>{% for provider in builtin_providers %}
+      {% set state = states|selectattr('provider', 'equalto', provider.name)|first %}
+      <tr><td><b>{{ provider.name }}</b></td><td class="admin-mono" dir="ltr">{{ provider.url }}</td>
+      <td>{% if state %}<span class="admin-badge {{ state.status }}">{{ {'ok':'موفق','error':'خطا','running':'در حال اجرا'}.get(state.status, state.status) }}</span>{% else %}<span class="admin-badge">هنوز اجرا نشده</span>{% endif %}</td>
+      <td>{{ state.message if state else 'در انتظار اولین همگام‌سازی' }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <p class="admin-empty">منابع داخلی هستند و نیازی به ثبت دستی در APIهای سفارشی ندارند.</p>
+</section>
+<section class="admin-panel">
   <div class="admin-panel-head"><h2>APIهای ثبت‌شده</h2><span class="admin-mono">{{ sources|length }} منبع</span></div>
   {% if sources %}
   <div class="admin-table-wrap"><table class="admin-table">
