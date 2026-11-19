@@ -43,6 +43,13 @@ app.include_router(admin_router)
 
 @app.middleware("http")
 async def admin_headers(request: Request, call_next):
+    if request.url.path.startswith("/admin"):
+        host = (request.headers.get("host") or "").split(":", 1)[0].strip("[]").lower()
+        allowed = {"localhost", "127.0.0.1", "::1", "amz-catalog-live.onrender.com"}
+        configured = os.getenv("AMZ_ALLOWED_HOSTS", "")
+        allowed.update(part.strip().lower() for part in configured.split(",") if part.strip())
+        if host not in allowed:
+            return JSONResponse({"detail": "Invalid host"}, status_code=403)
     response = await call_next(request)
     if request.url.path.startswith("/admin"):
         response.headers["Cache-Control"] = "no-store"
@@ -99,7 +106,7 @@ async def robots_txt(request: Request):
 async def sitemap_xml(request: Request):
     from xml.sax.saxutils import escape
 
-    base = str(request.base_url).rstrip("/")
+    base = os.getenv("AMZ_PUBLIC_URL", str(request.base_url)).rstrip("/")
     entries = db.sitemap_entries()
     urls = [f"<url><loc>{escape(base)}/</loc></url>"]
     for entry in entries:
