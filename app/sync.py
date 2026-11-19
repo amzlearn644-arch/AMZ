@@ -18,7 +18,9 @@ def _is_due() -> bool:
     providers = configured_providers()
     if not providers:
         return False
-    # A failed attempt must not postpone recovery for six hours. Only a successful\n    # import advances the provider freshness window.\n    attempts = {state["provider"]: state["last_success"] for state in db.get_sync_states()}
+    # A failed attempt must not postpone recovery for six hours. Only a successful
+    # import advances the provider freshness window.
+    attempts = {state["provider"]: state["last_success"] for state in db.get_sync_states()}
     now = datetime.now(timezone.utc)
     for provider in providers:
         value = attempts.get(provider.name, "")
