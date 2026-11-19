@@ -6,13 +6,14 @@
   <meta name="theme-color" content="#f5f6f2">
   <meta name="description" content="نرم‌افزارهای کاربردی و منتخب برای سیستم‌عامل‌های مختلف؛ جست‌وجو، بررسی و دریافت آسان.">
   <title>AMZ — انتخاب نرم‌افزار، ساده‌تر</title>
-  <link rel="icon" href="/favicon.ico" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="topbar">
   <a class="brand" href="/" aria-label="صفحهٔ اصلی AMZ"><span class="brand-mark">a</span><span>amz<span class="brand-dot">.</span></span></a>
-  <nav class="toplinks" aria-label="پیمایش اصلی"><a href="#catalog">نرم‌افزارها</a><a href="#about">دربارهٔ AMZ</a><a href="#contact">تماس با ما</a></nav>
+  <nav class="toplinks" id="main-nav" aria-label="پیمایش اصلی"><a href="#catalog">نرم‌افزارها</a><a href="#about">دربارهٔ AMZ</a><a href="#contact">تماس با ما</a></nav>
+  <button class="nav-toggle" id="nav-toggle" type="button" aria-label="باز کردن منو" aria-controls="main-nav" aria-expanded="false"><span></span><span></span></button>
   <span class="site-credit" dir="ltr">Made by Amin</span>
 </header>
 <main>
@@ -27,6 +28,7 @@
         <div id="search-suggestions" class="search-suggestions" role="listbox" aria-label="پیشنهادهای نرم‌افزار"></div>
         {% if selected_os %}<input type="hidden" name="os" value="{{ selected_os }}">{% endif %}
         {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+        <input type="hidden" name="sort" value="{{ sort }}">
         <button type="submit">جست‌وجو <span>↙</span></button>
       </form>
       <div class="hero-meta"><span>منتخب برای استفادهٔ روزمره</span><span class="meta-separator"></span><span>دریافت آسان نرم‌افزار</span></div>
@@ -44,8 +46,8 @@
     <div class="section-heading"><div><span class="eyebrow"><span class="eyebrow-line"></span> کاتالوگ</span><h2>پیدا کن و <em>شروع کن.</em></h2></div><span class="result-count">{{ first_result }}–{{ last_result }} از {{ total }} نرم‌افزار</span></div>
     <div class="filter-row">
       <div class="filter-chips" aria-label="فیلتر بر اساس سیستم‌عامل">
-        <a class="chip {% if not selected_os %}active{% endif %}" href="/?q={{ q|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">همه</a>
-        {% for system in systems %}<a class="chip {% if selected_os == system %}active{% endif %}" href="/?q={{ q|urlencode }}&os={{ system|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">{{ system }}</a>{% endfor %}
+        <a class="chip {% if not selected_os %}active{% endif %}" href="/?q={{ q|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}&sort={{ sort|urlencode }}">همه</a>
+        {% for system in systems %}<a class="chip {% if selected_os == system %}active{% endif %}" href="/?q={{ q|urlencode }}&os={{ system|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}&sort={{ sort|urlencode }}">{{ system }}</a>{% endfor %}
       </div>
       <form method="get" class="category-select"><input type="hidden" name="q" value="{{ q }}"><label for="sort">مرتب‌سازی:</label><select name="sort" id="sort" onchange="this.form.submit()"><option value="name" {% if sort == "name" %}selected{% endif %}>نام نرم‌افزار</option><option value="newest" {% if sort == "newest" %}selected{% endif %}>جدیدترین بروزرسانی</option><option value="name_desc" {% if sort == "name_desc" %}selected{% endif %}>نام (نزولی)</option></select>{% if selected_os %}<input type="hidden" name="os" value="{{ selected_os }}">{% endif %}<label for="category">دسته:</label><select name="category" id="category" onchange="this.form.submit()"><option value="">همهٔ دسته‌ها</option>{% for category in categories %}<option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select></form>
     </div>

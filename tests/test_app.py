@@ -26,6 +26,14 @@ class CatalogSmokeTests(unittest.TestCase):
             self.assertEqual(client.get("/sitemap.xml").status_code, 200)
             self.assertEqual(client.get("/favicon.ico", follow_redirects=True).status_code, 200)
 
+    def test_catalog_controls_preserve_selected_sort(self):
+        db.init_db()
+        with TestClient(app) as client:
+            response = client.get("/", params={"sort": "newest"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("&sort=newest", response.text)
+        self.assertIn('name="sort" value="newest"', response.text)
+
     def test_catalog_detail_and_suggestions(self):
         db.init_db()
         self.assertIsNotNone(db.get_software("firefox"))

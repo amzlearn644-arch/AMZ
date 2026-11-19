@@ -1,8 +1,7 @@
 (() => {
   const input = document.getElementById('software-search');
   const box = document.getElementById('search-suggestions');
-  if (!input || !box) return;
-
+  if (input && box) {
   let timer;
   let controller;
   let activeIndex = -1;
@@ -74,4 +73,23 @@
   input.addEventListener('focus', () => {
     if (input.value.trim().length >= 2 && !box.childElementCount) load();
   });
+  }
+
+  const navToggle = document.getElementById("nav-toggle");
+  const mainNav = document.getElementById("main-nav");
+  if (navToggle && mainNav) {
+    const setMenuOpen = open => {
+      mainNav.classList.toggle("is-open", open);
+      navToggle.setAttribute("aria-expanded", String(open));
+      navToggle.setAttribute("aria-label", open ? "بستن منو" : "باز کردن منو");
+    };
+    navToggle.addEventListener("click", () => setMenuOpen(!mainNav.classList.contains("is-open")));
+    mainNav.querySelectorAll("a").forEach(link => link.addEventListener("click", () => setMenuOpen(false)));
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".topbar")) setMenuOpen(false);
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") setMenuOpen(false);
+    });
+  }
 })();

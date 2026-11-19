@@ -36,6 +36,17 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(db.get_software("vlc")["name"], "VLC Media Player")
         self.assertIsNone(db.get_software("not-found"))
 
+    def test_search_suggestions_deduplicate_across_sources(self):
+        db.upsert_many([
+            {"slug": "sample-android-fdroid", "name": "Sample Android App", "os": "Android", "source": "F-Droid", "source_id": "org.example.sample"},
+            {"slug": "sample-android-izzy", "name": "Sample Android App", "os": "Android", "source": "IzzyOnDroid", "source_id": "org.example.sample"},
+            {"slug": "sample-windows-winget", "name": "Sample Windows App", "os": "Windows", "source": "WinGet", "source_id": "Vendor.Sample"},
+            {"slug": "sample-windows-scoop", "name": "Sample Windows App", "os": "Windows", "source": "Scoop", "source_id": "sample"},
+        ])
+        suggestions = db.search_suggestions("Sample", limit=10)
+        self.assertEqual(len(suggestions), 2)
+        self.assertEqual({item["slug"] for item in suggestions}, {"sample-android-fdroid", "sample-windows-winget"})
+
     def test_search_query_wildcards_are_literal(self):
         self.assertEqual(db.list_software(query="%")[1], 0)
         self.assertEqual(db.list_software(query="_")[1], 0)

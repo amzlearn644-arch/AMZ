@@ -257,18 +257,48 @@ def sitemap_entries() -> list[dict[str, str]]:
     return [{"slug": row["slug"], "updated_at": row["updated_at"]} for row in rows]
 
 def search_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
-    """Return a small set of name-prefix matches for live search suggestions."""
+    """Return unique app suggestions, preferring the primary repository listing."""
     needle = query.strip()[:80]
     if len(needle) < 2:
         return []
     escaped = needle.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    partition_key = """
+        CASE
+            WHEN lower(os) = 'android' THEN
+                'android:' || CASE WHEN trim(source_id) <> '' THEN lower(trim(source_id)) ELSE lower(slug) END
+            WHEN lower(os) LIKE '%windows%' THEN
+                'windows:' || CASE WHEN trim(name) <> '' THEN lower(trim(name)) ELSE lower(slug) END
+            ELSE 'other:' || lower(os) || ':' || lower(slug)
+        END
+    """
+    source_priority = """
+        CASE
+            WHEN lower(source) LIKE 'winget%' THEN 0
+            WHEN lower(source) LIKE 'f-droid%' THEN 0
+            WHEN lower(source) LIKE 'scoop%' THEN 1
+            WHEN lower(source) LIKE 'izzy%' THEN 1
+            ELSE 2
+        END
+    """
     with connection() as conn:
         rows = conn.execute(
-            "SELECT name, slug FROM software WHERE name LIKE ? ESCAPE '!' ORDER BY CASE WHEN name LIKE ? ESCAPE '!' THEN 0 ELSE 1 END, name COLLATE NOCASE LIMIT ?",
+            f"""
+            WITH ranked AS (
+                SELECT name, slug, ROW_NUMBER() OVER (
+                    PARTITION BY {partition_key}
+                    ORDER BY {source_priority}, updated_at DESC, id ASC
+                ) AS rn
+                FROM software
+            )
+            SELECT name, slug FROM ranked
+            WHERE rn = 1 AND name LIKE ? ESCAPE '!'
+            ORDER BY CASE WHEN name LIKE ? ESCAPE '!' THEN 0 ELSE 1 END,
+                     name COLLATE NOCASE
+            LIMIT ?
+            """,
             ("%" + escaped + "%", escaped + "%", max(1, min(limit, 10))),
         ).fetchall()
     return [{"name": row["name"], "slug": row["slug"]} for row in rows]
-
 
 def get_software(slug: str) -> dict[str, Any] | None:
     with connection() as conn:
