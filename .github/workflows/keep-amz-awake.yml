@@ -1,0 +1,34 @@
+name: Keep AMZ Render Awake
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amz-render-keepalive
+  cancel-in-progress: true
+
+jobs:
+  keepalive:
+    name: Ping AMZ Catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check live website
+        env:
+          SITE_URL: https://amz-catalog-live.onrender.com/
+        run: |
+          set -euo pipefail
+          echo "Checking $SITE_URL"
+          status="$(curl --silent --show-error --location --max-time 45 --output /tmp/amz-response.html --write-out '%{http_code}' "$SITE_URL")"
+          echo "HTTP status: $status"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 400 ]; then
+            echo "AMZ returned an unsuccessful HTTP status."
+            head -c 1000 /tmp/amz-response.html || true
+            exit 1
+          fi
+          echo "AMZ is responding successfully."
