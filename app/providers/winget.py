@@ -117,8 +117,8 @@ class WingetProvider:
                 homepage = self._parse_yaml_scalar(manifest, "PackageUrl")
                 installer = next((row for row in files or [] if isinstance(row, dict) and row.get("name", "").lower().endswith(".installer.yaml")), None)
                 installer_text = await get_raw(installer["download_url"]) if installer and installer.get("download_url") else ""
-                download_match = re.search(r'(?m)^\\s*InstallerUrl:\\s*[\\"\\']?(https://[^\\s\\"\\']+)', installer_text)
-                download = download_match.group(1).rstrip("\\"'") if download_match else ""
+                download_match = re.search(r"(?m)^\s*InstallerUrl:\s*[\"']?(https://[^\s\"']+)", installer_text)
+                download = download_match.group(1).rstrip("\"'") if download_match else ""
                 records.append({
                     "slug": re.sub(r"[^a-z0-9]+", "-", package_id.lower()).strip("-")[:180],
                     "name": name[:180], "summary": summary[:500], "description": summary[:4000],
