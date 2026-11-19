@@ -22,7 +22,7 @@ class FdroidProvider:
     ) -> None:
         self.name = name or self.name
         self.index_url = index_url or os.getenv("FDROID_INDEX_URL", "https://f-droid.org/repo/index-v1.json")
-        self.limit = max(1, int(max_items or os.getenv("FDROID_MAX_ITEMS", "1000000"))
+        self.limit = max(1, int(max_items or os.getenv("FDROID_MAX_ITEMS", "1000000")))
         parsed = urlparse(self.index_url)
         if parsed.scheme != "https" or not parsed.hostname:
             raise ValueError("Repository index must use HTTPS")
