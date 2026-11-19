@@ -12,7 +12,7 @@ import httpx
 class WingetProvider:
     """Import the complete deduplicated WinGet package catalog via winget.run's public API."""
     name = "Winget"
-    API_URL = "https://winget.run/api/v2/packages"
+    API_URL = "https://api.winget.run/v2/packages"
     PAGE_SIZE = 24
     MAX_PAGES = int(os.getenv("WINGET_MAX_PAGES", "5000"))
 
