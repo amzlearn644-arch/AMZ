@@ -52,26 +52,27 @@ async def admin_headers(request: Request, call_next):
     return response
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def home(
     request: Request,
     q: str = Query("", max_length=80),
     os: str = Query("", max_length=40),
     category: str = Query("", max_length=80),
     page: int = Query(1, ge=1, le=100000),
+    sort: str = Query("name", pattern="^(name|newest|name_desc)$"),
 ):
     per_page = 36
-    _, total = db.list_software(q, os, category, limit=1, offset=0)
+    _, total = db.list_software(q, os, category, limit=1, offset=0, sort=sort)
     page_count = max(1, (total + per_page - 1) // per_page)
     page = min(page, page_count)
-    items, _ = db.list_software(q, os, category, limit=per_page, offset=(page - 1) * per_page)
+    items, _ = db.list_software(q, os, category, limit=per_page, offset=(page - 1) * per_page, sort=sort)
     categories, systems = db.get_facets()
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
             "items": items, "total": total, "q": q, "selected_os": os,
-            "selected_category": category, "categories": categories, "systems": systems,
+            "selected_category": category, "categories": categories, "systems": systems, "sort": sort,
             "last_sync": db.last_success(), "safe_url": safe_external_url,
             "icon_url": safe_external_url, "page": page, "page_count": page_count,
             "per_page": per_page, "first_result": ((page - 1) * per_page + 1) if total else 0,
@@ -79,6 +80,12 @@ async def home(
         },
     )
 
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="#3f6848"/><path d="M44 20H30c-9 0-14 5-14 13s5 13 14 13h14V20zm-9 18h-5c-4 0-6-2-6-5s2-5 6-5h5v10z" fill="#fff"/></svg>'
+    return Response(content=svg, media_type="image/svg+xml")
 
 
 @app.get("/robots.txt", include_in_schema=False)
