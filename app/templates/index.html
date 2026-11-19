@@ -56,7 +56,13 @@
           <div class="app-icon tone-{{ loop.index0 % 6 }}">{% if icon_url(item.icon_url) %}<img src="{{ icon_url(item.icon_url) }}" alt="" loading="lazy" decoding="async">{% else %}<span>{{ item.name[:1] }}</span><i>{{ ["✳","◉","↗","✦","◌","＋"][loop.index0 % 6] }}</i>{% endif %}</div>
           <div class="card-copy"><div class="card-title-row"><h3>{{ item.name }}</h3><span class="card-arrow">↙</span></div><p>{{ item.summary }}</p><div class="card-tags"><span>{{ item.category }}</span><span>{{ item.os.split(',')[0] }}</span></div></div>
         </a>
-        <a class="quick-download" href="{{ safe_url(item.download_url or item.homepage_url) }}" target="_blank" rel="noopener noreferrer" {% if not safe_url(item.download_url or item.homepage_url) %}aria-disabled="true" tabindex="-1"{% endif %}>دریافت نرم‌افزار <span>↗</span></a>
+        {% if safe_url(item.download_url) %}
+        <a class="quick-download" href="{{ safe_url(item.download_url) }}" target="_blank" rel="noopener noreferrer">دریافت از منبع اصلی <span>↗</span></a>
+        {% elif safe_url(item.homepage_url) %}
+        <a class="quick-download quick-download-secondary" href="{{ safe_url(item.homepage_url) }}" target="_blank" rel="noopener noreferrer">وب‌سایت رسمی <span>↗</span></a>
+        {% else %}
+        <span class="quick-download quick-download-disabled" aria-disabled="true">لینک دریافت موجود نیست</span>
+        {% endif %}
       </article>
       {% endfor %}
     </div>
