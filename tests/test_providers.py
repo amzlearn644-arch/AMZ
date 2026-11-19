@@ -145,10 +145,15 @@ class FeedProviderTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fdroid_provider_maps_index_without_downloading_apk(self):
         provider = FdroidProvider()
-        payload = {"packages": {"org.example.app": {
-            "name": "Example App", "summary": "A test app", "description": "Description", "categories": ["Internet"],
-            "packages": [{"apkName": "org.example.app_1.apk", "versionName": "1.0"}],
-        }}}
+        payload = {
+            "apps": [{
+                "packageName": "org.example.app", "name": "Example App", "summary": "A test app",
+                "description": "Description", "categories": ["Internet"], "webSite": "https://example.org",
+            }],
+            "packages": {"org.example.app": [{
+                "apkName": "org.example.app_1.apk", "versionName": "1.0", "versionCode": 1,
+            }]},
+        }
         response = type("Response", (), {"raise_for_status": lambda self: None, "json": lambda self: payload})()
         class Client:
             get = AsyncMock(return_value=response)
