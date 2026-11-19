@@ -43,23 +43,12 @@ app.include_router(admin_router)
 
 @app.middleware("http")
 async def admin_headers(request: Request, call_next):
-    host = (request.url.hostname or "").lower()
-    if request.url.path.startswith("/admin"):
-        try:
-            loopback = ipaddress.ip_address(host).is_loopback
-        except ValueError:
-            loopback = host == "localhost"
-        if not loopback:
-            response = JSONResponse(status_code=403, content={"detail": "پنل مدیریت فقط از همین دستگاه در دسترس است."})
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["X-Frame-Options"] = "DENY"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            return response
     response = await call_next(request)
     if request.url.path.startswith("/admin"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "same-origin"
     return response
 
 
