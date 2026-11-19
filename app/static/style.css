@@ -2,3 +2,24 @@
 @media(max-width:800px){.topbar{padding:0 24px}.hero{padding:66px 7% 70px;min-height:auto;grid-template-columns:1fr .7fr}.hero h1{font-size:48px}.hero-art{transform:scale(.82);margin:0 -30px}.catalog-section{padding:58px 7% 70px}.manifesto{margin:0 24px 42px;padding:32px 28px;grid-template-columns:50px 1fr;gap:15px}.manifesto>p{grid-column:2;margin:0 0 14px}.manifesto-number{left:20px}.contact-section{margin:0 24px 60px;padding:27px;grid-template-columns:1fr;gap:17px}.detail-main{padding:35px 24px 60px}}
 @media(max-width:600px){.topbar{height:65px;padding:0 18px}.toplinks{display:none}.local-badge{font-size:9px}.hero{display:block;padding:57px 7% 52px}.hero h1{font-size:46px;margin-top:17px}.hero-copy>p{font-size:12px}.search-form{height:53px}.search-form button{height:41px;padding:0 12px}.hero-art{height:205px;transform:scale(.75);margin:-5px auto -7px}.hero-index{left:auto;right:24px;bottom:18px}.hero-meta{font-size:9px}.catalog-section{padding:48px 6% 61px}.section-heading h2{font-size:26px}.filter-row{align-items:flex-start;flex-direction:column}.category-select{align-self:flex-end}.software-grid{grid-template-columns:1fr;gap:9px}.software-card{padding:15px}.manifesto{margin:0 18px 32px;padding:25px 21px;grid-template-columns:36px 1fr;gap:11px}.manifesto-mark{font-size:34px}.manifesto h2{font-size:20px}.manifesto>p{font-size:10px}.manifesto-number{font-size:8px}.contact-section{margin:0 18px 42px;padding:22px 18px;gap:13px}.contact-section h2{font-size:21px}.contact-links a{font-size:10px;padding:10px 11px}footer{height:auto;min-height:72px;padding:15px 18px;gap:10px;flex-wrap:wrap}footer>span:nth-child(2){display:none}.detail-main{padding:27px 16px 50px;min-height:calc(100vh - 137px)}.detail-card{padding:23px 18px}.detail-top{gap:14px}.detail-icon{width:58px;height:58px;border-radius:16px}.detail-heading h1{font-size:23px}.detail-heading p{font-size:10px}.detail-divider{margin:23px 0}.detail-body{grid-template-columns:1fr;gap:25px}.detail-info{border-right:0;border-top:1px solid #e7e9e2;padding:18px 0 0;grid-template-columns:repeat(2,1fr)}.detail-download-row{margin-top:26px;padding:14px;gap:12px}.download-button{white-space:nowrap;padding:11px 12px;font-size:10px}.detail-download-row>div span{font-size:9px}}
 .search-form{position:relative}.search-suggestions{position:absolute;top:calc(100% + 7px);right:0;left:0;z-index:20;display:grid;max-height:300px;overflow:auto;padding:5px;border:1px solid #dfe3d8;border-radius:8px;background:#fff;box-shadow:0 12px 28px #29372718}.search-suggestions[hidden]{display:none}.search-suggestion{padding:10px 12px;border-radius:5px;color:var(--ink);font-size:11px;text-align:right}.search-suggestion:hover,.search-suggestion[aria-selected=true]{background:#eef2e9;color:var(--green)}.site-credit{white-space:nowrap}@media(max-width:600px){.site-credit{font-size:9px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
+
+/* AMZ refinement: restrained, readable, and consistent across devices. */
+:root{--paper:#f7f8f5;--ink:#20251f;--muted:#747b70;--line:#e1e5dc;--green:#3f6848}
+body{line-height:1.65;-webkit-font-smoothing:antialiased}
+.topbar{height:72px}
+.brand{letter-spacing:-1.7px}
+.toplinks a,.footer-status,.homepage-link,.quick-download,.text-link{transition:color .18s ease,background-color .18s ease}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #668a5d;outline-offset:3px}
+.search-form:focus-within{border-color:#9aaa91;box-shadow:0 0 0 3px #426a4c12}
+.software-card{border-radius:8px;background:#fff;box-shadow:0 1px 2px #20251f05}
+.software-card:hover{transform:translateY(-1px);box-shadow:0 7px 18px #20251f0b}
+.quick-download{min-height:34px}
+.quick-download-secondary{color:#747b70}
+.quick-download-disabled{color:#999e95;justify-content:flex-start}
+.app-icon img{object-fit:contain}
+.detail-card{box-shadow:0 8px 30px #20251f06}
+.download-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px}
+.download-button:hover,.search-form button:hover{background:#31583b}
+@media(min-width:1100px){.software-grid{gap:14px}.software-card{padding:20px 20px 12px}}
+@media(max-width:600px){.topbar{height:62px}.software-card:hover{transform:none}.detail-download-row{align-items:flex-start;flex-direction:column}.download-button{width:100%}}
+@media(prefers-reduced-motion:reduce){.software-card,.quick-download,.download-button{transition:none}}
