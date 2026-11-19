@@ -202,16 +202,50 @@ def list_software(query: str = "", os_name: str = "", category: str = "", limit:
         clauses.append("category = ?")
         params.append(category[:80])
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
-    with connection() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM software" + where, params).fetchone()[0]
-        order_by = {
-            "name": "name COLLATE NOCASE ASC, id ASC",
-            "newest": "updated_at DESC, id DESC",
-            "name_desc": "name COLLATE NOCASE DESC, id DESC",
-        }.get(sort, "name COLLATE NOCASE ASC, id ASC")
-        rows = conn.execute("SELECT * FROM software" + where + " ORDER BY " + order_by + " LIMIT ? OFFSET ?", [*params, max(1, min(limit, 100)), max(0, offset)]).fetchall()
-    return [dict(row) for row in rows], total
 
+    # Count and display one listing per Windows app name and Android package ID,
+    # even when the same app is present in both WinGet/Scoop or F-Droid/Izzy.
+    partition_key = """
+        CASE
+            WHEN lower(os) = 'android' THEN
+                'android:' || CASE WHEN trim(source_id) <> '' THEN lower(trim(source_id)) ELSE lower(slug) END
+            WHEN lower(os) LIKE '%windows%' THEN
+                'windows:' || CASE WHEN trim(name) <> '' THEN lower(trim(name)) ELSE lower(slug) END
+            ELSE 'other:' || lower(os) || ':' || lower(slug)
+        END
+    """
+    priority = """
+        CASE
+            WHEN lower(source) LIKE 'winget%' THEN 0
+            WHEN lower(source) LIKE 'f-droid%' THEN 0
+            WHEN lower(source) LIKE 'scoop%' THEN 1
+            WHEN lower(source) LIKE 'izzy%' THEN 1
+            ELSE 2
+        END
+    """
+    ranked = f"""
+        WITH ranked AS (
+            SELECT id, ROW_NUMBER() OVER (
+                PARTITION BY {partition_key}
+                ORDER BY {priority}, updated_at DESC, id ASC
+            ) AS rn
+            FROM software{where}
+        )
+    """
+    with connection() as conn:
+        total = conn.execute(ranked + " SELECT COUNT(*) FROM ranked WHERE rn = 1", params).fetchone()[0]
+        order_by = {
+            "name": "s.name COLLATE NOCASE ASC, s.id ASC",
+            "newest": "s.updated_at DESC, s.id DESC",
+            "name_desc": "s.name COLLATE NOCASE DESC, s.id DESC",
+        }.get(sort, "s.name COLLATE NOCASE ASC, s.id ASC")
+        rows = conn.execute(
+            ranked
+            + " SELECT s.* FROM software AS s JOIN ranked AS r ON r.id = s.id "
+            + "WHERE r.rn = 1 ORDER BY " + order_by + " LIMIT ? OFFSET ?",
+            [*params, max(1, min(limit, 100)), max(0, offset)],
+        ).fetchall()
+    return [dict(row) for row in rows], total
 
  
 def sitemap_entries() -> list[dict[str, str]]:
