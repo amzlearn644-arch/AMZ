@@ -37,6 +37,9 @@ class ScoopProvider:
 
     async def fetch(self) -> list[dict[str, Any]]:
         headers = {"User-Agent": "AMZCatalog/1.0 (metadata sync)", "Accept": "application/vnd.github+json"}
+        token = __import__("os").getenv("GITHUB_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         timeout = httpx.Timeout(20.0, connect=6.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
             response = await client.get(self.API_URL, params={"per_page": 1000})
