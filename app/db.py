@@ -207,6 +207,15 @@ def list_software(query: str = "", os_name: str = "", category: str = "", limit:
     return [dict(row) for row in rows], total
 
 
+ 
+def sitemap_entries() -> list[dict[str, str]]:
+    """Return public catalog URLs and their last metadata update timestamp."""
+    with connection() as conn:
+        rows = conn.execute(
+            "SELECT slug, updated_at FROM software ORDER BY slug COLLATE NOCASE"
+        ).fetchall()
+    return [{"slug": row["slug"], "updated_at": row["updated_at"]} for row in rows]
+
 def search_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
     """Return a small set of name-prefix matches for live search suggestions."""
     needle = query.strip()[:80]
