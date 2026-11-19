@@ -83,7 +83,7 @@ async def run_sync(
 
 async def sync_loop() -> None:
     await asyncio.sleep(2)
-    force_startup = os.getenv("AMZ_FORCE_SYNC_ON_START", "0") == "1"
+    force_startup = os.getenv("AMZ_FORCE_SYNC_ON_START", "1") == "1"
     while True:
         try:
             if force_startup:
