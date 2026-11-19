@@ -93,11 +93,13 @@ def _check_origin(request: Request) -> None:
     parsed = urlparse(origin)
     request_host = (request.headers.get("host") or "").lower()
     origin_host = (parsed.hostname or "").lower()
+    request_hostname = (urlparse("//" + request_host).hostname or "").lower()
+    local_http = parsed.scheme == "http" and request_hostname in {"127.0.0.1", "localhost", "::1"}
     if (
-        parsed.scheme != "https"
+        (parsed.scheme != "https" and not local_http)
         or not origin_host
         or parsed.netloc.lower() != request_host
-        or origin_host != (urlparse("//" + request_host).hostname or "").lower()
+        or origin_host != request_hostname
     ):
         raise HTTPException(status_code=403, detail="درخواست از مبدأ نامعتبر رد شد.")
 
