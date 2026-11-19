@@ -36,6 +36,18 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(db.get_software("vlc")["name"], "VLC Media Player")
         self.assertIsNone(db.get_software("not-found"))
 
+    def test_search_query_wildcards_are_literal(self):
+        self.assertEqual(db.list_software(query="%")[1], 0)
+        self.assertEqual(db.list_software(query="_")[1], 0)
+
+    def test_os_filter_matches_complete_system_names(self):
+        android, _ = db.list_software(os_name="Android", limit=100)
+        windows, _ = db.list_software(os_name="Windows", limit=100)
+        self.assertTrue(android)
+        self.assertTrue(windows)
+        self.assertTrue(all("Android" in [part.strip() for part in row["os"].split(",")] for row in android))
+        self.assertTrue(all("Windows" in [part.strip() for part in row["os"].split(",")] for row in windows))
+
     def test_upsert_is_idempotent(self):
         item = {"slug": "sample", "name": "Sample", "source": "test", "source_id": "1", "download_url": "https://example.org/file"}
         db.upsert_many([item])
