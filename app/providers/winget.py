@@ -56,6 +56,9 @@ class WingetProvider:
 
     async def fetch(self) -> list[dict[str, Any]]:
         headers = {"User-Agent": "AMZCatalog/1.0 (metadata sync)", "Accept": "application/vnd.github+json"}
+        token = __import__("os").getenv("GITHUB_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         timeout = httpx.Timeout(12.0, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=headers) as client:
             requests = 0
