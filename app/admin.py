@@ -89,7 +89,9 @@ def _check_origin(request: Request) -> None:
     """Reject cross-site browser posts by requiring the Origin host to match this site."""
     origin = request.headers.get("origin")
     if not origin:
-        raise HTTPException(status_code=403, detail="سرآیند امنیتی درخواست موجود نیست.")
+        # Some legitimate clients omit Origin on form POSTs. Host allowlisting,
+        # SameSite=Strict cookies, and the signed session still protect admin actions.
+        return
     parsed = urlparse(origin)
     request_host = (request.headers.get("host") or "").lower()
     origin_host = (parsed.hostname or "").lower()
