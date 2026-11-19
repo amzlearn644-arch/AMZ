@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -80,6 +80,30 @@ async def home(
     )
 
 
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt(request: Request):
+    base = str(request.base_url).rstrip("/")
+    content = f"User-agent: *\\nAllow: /\\nDisallow: /admin\\nDisallow: /api/\\nSitemap: {base}/sitemap.xml\\n"
+    return Response(content=content, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml(request: Request):
+    from xml.sax.saxutils import escape
+
+    base = str(request.base_url).rstrip("/")
+    entries = db.sitemap_entries()
+    urls = [f"<url><loc>{escape(base)}/</loc></url>"]
+    for entry in entries:
+        loc = escape(f"{base}/software/{entry['slug']}")
+        lastmod = escape(str(entry.get("updated_at", ""))[:10])
+        lastmod_xml = f"<lastmod>{lastmod}</lastmod>" if lastmod else ""
+        urls.append(f"<url><loc>{loc}</loc>{lastmod_xml}</url>")
+    xml = '<?xml version="1.0" encoding="UTF-8"?>' + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(urls) + "</urlset>"
+    return Response(content=xml, media_type="application/xml; charset=utf-8")
+
+
 @app.get("/software/{slug}", response_class=HTMLResponse)
 async def software_detail(request: Request, slug: str):
     item = db.get_software(slug)
@@ -88,7 +112,7 @@ async def software_detail(request: Request, slug: str):
     item["download_url"] = safe_external_url(item["download_url"])
     item["homepage_url"] = safe_external_url(item["homepage_url"])
     item["icon_url"] = safe_external_url(item["icon_url"])
-    return templates.TemplateResponse(request=request, name="detail.html", context={"item": item})
+    return templates.TemplateResponse(request=request, name="detail.html", context={"item": item, "canonical_url": str(request.base_url).rstrip("/") + "/software/" + item["slug"]})
 
 
 @app.get("/api/software")
