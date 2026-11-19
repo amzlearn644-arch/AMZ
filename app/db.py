@@ -230,8 +230,8 @@ def search_suggestions(query: str, limit: int = 8) -> list[dict[str, str]]:
     escaped = needle.replace("!", "!!").replace("%", "!%").replace("_", "!_")
     with connection() as conn:
         rows = conn.execute(
-            "SELECT name, slug FROM software WHERE name LIKE ? ESCAPE '!' ORDER BY name COLLATE NOCASE LIMIT ?",
-            (escaped + "%", max(1, min(limit, 10))),
+            "SELECT name, slug FROM software WHERE name LIKE ? ESCAPE '!' ORDER BY CASE WHEN name LIKE ? ESCAPE '!' THEN 0 ELSE 1 END, name COLLATE NOCASE LIMIT ?",
+            ("%" + escaped + "%", escaped + "%", max(1, min(limit, 10))),
         ).fetchall()
     return [{"name": row["name"], "slug": row["slug"]} for row in rows]
 
