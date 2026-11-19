@@ -40,7 +40,7 @@
   </section>
 
   <section class="catalog-section" id="catalog">
-    <div class="section-heading"><div><span class="eyebrow"><span class="eyebrow-line"></span> کاتالوگ</span><h2>پیدا کن و <em>شروع کن.</em></h2></div><span class="result-count">{{ total }} نرم‌افزار</span></div>
+    <div class="section-heading"><div><span class="eyebrow"><span class="eyebrow-line"></span> کاتالوگ</span><h2>پیدا کن و <em>شروع کن.</em></h2></div><span class="result-count">{{ first_result }}–{{ last_result }} از {{ total }} نرم‌افزار</span></div>
     <div class="filter-row">
       <div class="filter-chips" aria-label="فیلتر بر اساس سیستم‌عامل">
         <a class="chip {% if not selected_os %}active{% endif %}" href="/?q={{ q|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">همه</a>
@@ -68,6 +68,13 @@
     </div>
     {% else %}
     <div class="empty-state"><div class="empty-symbol">⌕</div><h3>چیزی با این مشخصات پیدا نشد.</h3><p>عبارت جست‌وجو یا فیلترها را تغییر بده.</p><a class="text-link" href="/">نمایش همهٔ نرم‌افزارها ↙</a></div>
+    {% endif %}
+    {% if page_count > 1 %}
+    <nav class="pagination" aria-label="صفحه‌های کاتالوگ">
+      {% if page > 1 %}<a class="page-link page-prev" href="/?q={{ q|urlencode }}&os={{ selected_os|urlencode }}&category={{ selected_category|urlencode }}&page={{ page - 1 }}" rel="prev">→ قبلی</a>{% endif %}
+      <span class="page-indicator">صفحهٔ {{ page }} از {{ page_count }}</span>
+      {% if page < page_count %}<a class="page-link page-next" href="/?q={{ q|urlencode }}&os={{ selected_os|urlencode }}&category={{ selected_category|urlencode }}&page={{ page + 1 }}" rel="next">بعدی ←</a>{% endif %}
+    </nav>
     {% endif %}
   </section>
   <section class="manifesto" id="about"><div class="manifesto-mark">a<span>.</span></div><div><span class="eyebrow">کم‌حجم، مفید، برای همه</span><h2>انتخابی ساده،<br><em>برای کارهای روزمره.</em></h2></div><p>در AMZ برنامه‌های کاربردی را پیدا کن، مشخصاتشان را ببین و با چند کلیک انتخابت را انجام بده.</p><span class="manifesto-number">A—01</span></section>
