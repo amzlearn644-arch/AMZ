@@ -4,16 +4,16 @@ import asyncio
 import os
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
 
 class ScoopProvider:
-    """Import metadata and publisher download URLs from Scoop Main."""
+    """Import Scoop Main metadata through jsDelivr's public package index/CDN."""
     name = "Scoop"
-    API_URL = "https://api.github.com/repos/ScoopInstaller/Main/contents/bucket"
-    RAW_BASE = "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/"
+    INDEX_URL = "https://data.jsdelivr.com/v1/package/gh/ScoopInstaller/Main@master/flat"
+    CDN_BASE = "https://cdn.jsdelivr.net/gh/ScoopInstaller/Main@master/"
     MAX_ITEMS = int(os.getenv("SCOOP_MAX_ITEMS", "100000"))
 
     @staticmethod
@@ -37,35 +37,47 @@ class ScoopProvider:
         return ""
 
     async def fetch(self) -> list[dict[str, Any]]:
-        headers = {"User-Agent": "AMZCatalog/1.0 (metadata sync)", "Accept": "application/vnd.github+json"}
-        github_token = os.getenv("GITHUB_TOKEN", "").strip()
-        if github_token:
-            headers["Authorization"] = f"Bearer {github_token}"
-        timeout = httpx.Timeout(20.0, connect=6.0)
+        headers = {"User-Agent": "AMZCatalog/1.0 (public metadata sync)", "Accept": "application/json"}
+        timeout = httpx.Timeout(45.0, connect=10.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
-            response = await client.get(self.API_URL, params={"per_page": 1000})
-            response.raise_for_status()
-            files = response.json()
+            index_response = await client.get(self.INDEX_URL)
+            index_response.raise_for_status()
+            payload = index_response.json()
+            files = payload.get("files") if isinstance(payload, dict) else None
             if not isinstance(files, list):
-                raise ValueError("Scoop Main bucket did not return a file list")
-            names = [
-                str(row.get("name", "")) for row in files
-                if isinstance(row, dict) and row.get("type") == "file"
-                and str(row.get("name", "")).endswith(".json")
-                and re.fullmatch(r"[A-Za-z0-9._+-]+\.json", str(row.get("name", "")))
-            ][: self.MAX_ITEMS]
-            semaphore = asyncio.Semaphore(8)
+                raise ValueError("Scoop CDN index returned an invalid file list")
+
+            paths = []
+            for row in files:
+                if not isinstance(row, dict):
+                    continue
+                path = str(row.get("name") or "").lstrip("/")
+                if path.startswith("bucket/") and path.endswith(".json"):
+                    filename = path.rsplit("/", 1)[-1]
+                    if re.fullmatch(r"[A-Za-z0-9._+-]+\.json", filename):
+                        paths.append(filename)
+            paths = sorted(set(paths))[: self.MAX_ITEMS]
+            semaphore = asyncio.Semaphore(12)
 
             async def fetch_one(filename: str) -> dict[str, Any] | None:
                 async with semaphore:
-                    try:
-                        result = await client.get(self.RAW_BASE + filename)
-                        result.raise_for_status()
-                        if len(result.content) > 500_000:
-                            return None
-                        data = result.json()
-                    except (httpx.HTTPError, ValueError):
-                        return None
+                    url = self.CDN_BASE + "bucket/" + quote(filename, safe="._+-")
+                    for attempt in range(3):
+                        try:
+                            result = await client.get(url)
+                            if result.status_code == 429 or result.status_code >= 500:
+                                if attempt < 2:
+                                    await asyncio.sleep(1.5 * (attempt + 1))
+                                    continue
+                            result.raise_for_status()
+                            if len(result.content) > 500_000:
+                                return None
+                            data = result.json()
+                            break
+                        except (httpx.HTTPError, ValueError):
+                            if attempt == 2:
+                                return None
+                            await asyncio.sleep(1.0 * (attempt + 1))
                 if not isinstance(data, dict):
                     return None
                 app_id = filename[:-5]
@@ -89,5 +101,8 @@ class ScoopProvider:
                     "source_id": app_id,
                 }
 
-            results = await asyncio.gather(*(fetch_one(name) for name in names))
-            return [item for item in results if item is not None]
+            results = await asyncio.gather(*(fetch_one(name) for name in paths))
+            records = [item for item in results if item is not None]
+            if paths and not records:
+                raise ValueError("Scoop CDN index loaded but no manifests could be parsed")
+            return records
