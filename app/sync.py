@@ -48,7 +48,9 @@ async def run_sync(
     async with _sync_lock:
         if not force and not _is_due():
             return {"status": "fresh", "providers": []}
+        logger.warning("AMZ sync: loading enabled provider configuration")
         providers = configured_providers()
+        logger.warning("AMZ sync: loaded %d providers: %s", len(providers), ", ".join(p.name for p in providers))
         if provider_name is not None:
             providers = [
                 provider for provider in providers
