@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -37,6 +38,9 @@ class ScoopProvider:
 
     async def fetch(self) -> list[dict[str, Any]]:
         headers = {"User-Agent": "AMZCatalog/1.0 (metadata sync)", "Accept": "application/vnd.github+json"}
+        github_token = os.getenv("GITHUB_TOKEN", "").strip()
+        if github_token:
+            headers["Authorization"] = f"Bearer {github_token}"
         token = __import__("os").getenv("GITHUB_TOKEN", "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
