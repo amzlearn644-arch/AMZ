@@ -203,7 +203,7 @@ async def login(request: Request):
     response = RedirectResponse(next_path, status_code=303)
     response.set_cookie(
         COOKIE_NAME, issue_token(), max_age=SESSION_SECONDS,
-        httponly=True, secure=True, samesite="strict", path="/admin",
+        httponly=True, secure=(request.url.scheme == "https"), samesite="strict", path="/admin",
     )
     return response
 
