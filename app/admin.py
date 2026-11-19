@@ -237,8 +237,10 @@ async def software_list(request: Request, q: str = "", page: int = 1):
     _guard(request)
     per_page = 40
     page = max(1, page)
-    items, total = db.list_software(q.strip()[:80], limit=per_page, offset=(page - 1) * per_page)
+    _, total = db.list_software(q.strip()[:80], limit=1, offset=0)
     pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages)
+    items, _ = db.list_software(q.strip()[:80], limit=per_page, offset=(page - 1) * per_page)
     categories, systems = db.get_facets()
     return _render(request, "admin_list.html", {
         "active": "software", "items": items, "total": total, "q": q,
