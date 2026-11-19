@@ -191,12 +191,13 @@ def list_software(query: str = "", os_name: str = "", category: str = "", limit:
     clauses: list[str] = []
     params: list[Any] = []
     if query.strip():
-        needle = f"%{query.strip()[:80]}%"
-        clauses.append("(name LIKE ? OR summary LIKE ? OR description LIKE ?)")
+        raw_needle = query.strip()[:80]
+        needle = "%" + raw_needle.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+        clauses.append("(name LIKE ? ESCAPE '!' OR summary LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!')")
         params.extend([needle, needle, needle])
     if os_name:
-        clauses.append("(',' || lower(os) || ',') LIKE ?")
-        params.append(f"%{os_name.strip().lower()}%")
+        clauses.append("(',' || lower(replace(os, ', ', ',')) || ',') LIKE ?")
+        params.append(f"%,{os_name.strip().lower()},%")
     if category:
         clauses.append("category = ?")
         params.append(category[:80])
