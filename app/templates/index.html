@@ -57,7 +57,7 @@
           <div class="card-copy"><div class="card-title-row"><h3>{{ item.name }}</h3><span class="card-arrow">↙</span></div><p>{{ item.summary }}</p><div class="card-tags"><span>{{ item.category }}</span><span>{{ item.os.split(',')[0] }}</span></div></div>
         </a>
         {% if safe_url(item.download_url) %}
-        <a class="quick-download" href="{{ safe_url(item.download_url) }}" target="_blank" rel="noopener noreferrer">دریافت از منبع اصلی <span>↗</span></a>
+        <a class="quick-download" href="{{ safe_url(item.download_url) }}" target="_blank" rel="noopener noreferrer">صفحه دریافت رسمی <span>↗</span></a>
         {% elif safe_url(item.homepage_url) %}
         <a class="quick-download quick-download-secondary" href="{{ safe_url(item.homepage_url) }}" target="_blank" rel="noopener noreferrer">وب‌سایت رسمی <span>↗</span></a>
         {% else %}
