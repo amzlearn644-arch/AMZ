@@ -126,7 +126,7 @@ async def software_detail(request: Request, slug: str):
     item["download_url"] = safe_external_url(item["download_url"])
     item["homepage_url"] = safe_external_url(item["homepage_url"])
     item["icon_url"] = safe_external_url(item["icon_url"])
-    return templates.TemplateResponse(request=request, name="detail.html", context={"item": item, "canonical_url": os.getenv("AMZ_PUBLIC_URL", str(request.base_url)).rstrip("/") + "/software/" + item["slug"]})
+    return templates.TemplateResponse(request=request, name="detail.html", context={"item": item, "safe_download_url": item["download_url"], "canonical_url": os.getenv("AMZ_PUBLIC_URL", str(request.base_url)).rstrip("/") + "/software/" + item["slug"]})
 
 
 @app.get("/api/software")
