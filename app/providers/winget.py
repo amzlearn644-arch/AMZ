@@ -53,7 +53,7 @@ class WingetProvider:
             "source": "Winget", "source_id": package_id[:300],
         }
 
-    async def _get_page(self, client: httpx.AsyncClient, page: int) -> list[dict[str, Any]]:
+    async def _get_payload(self, client: httpx.AsyncClient, page: int) -> dict[str, Any]:
         params = {"take": self.PAGE_SIZE, "page": page, "sort": "Latest.Name", "order": 1}
         last_error: Exception | None = None
         for attempt in range(7):
@@ -69,29 +69,32 @@ class WingetProvider:
                         f"WinGet page {page}: HTTP {response.status_code}",
                         request=response.request, response=response,
                     )
-                    logger.warning("WinGet page %d returned HTTP %d; retry %d/7 in %.1fs",
-                                   page, response.status_code, attempt + 1, delay)
+                    logger.warning(
+                        "WinGet page %d returned HTTP %d; retry %d/7 in %.1fs",
+                        page, response.status_code, attempt + 1, delay,
+                    )
                     if attempt < 6:
                         await asyncio.sleep(delay)
                         continue
                     raise last_error
                 response.raise_for_status()
-                data = response.json()
-                result = data.get("Packages", []) if isinstance(data, dict) else []
-                if not isinstance(result, list):
-                    raise ValueError(f"WinGet page {page} is invalid")
-                return result
+                payload = response.json()
+                if not isinstance(payload, dict):
+                    raise ValueError(f"WinGet page {page} returned invalid JSON")
+                return payload
             except httpx.RequestError as exc:
                 last_error = exc
                 if attempt >= 6:
                     raise
                 delay = min(30.0, 1.5 ** attempt)
-                logger.warning("WinGet page %d network error; retry %d/7 in %.1fs: %s",
-                               page, attempt + 1, delay, exc)
+                logger.warning(
+                    "WinGet page %d network error; retry %d/7 in %.1fs: %s",
+                    page, attempt + 1, delay, exc,
+                )
                 await asyncio.sleep(delay)
         if last_error:
             raise last_error
-        return []
+        return {}
 
     async def fetch(self) -> list[dict[str, Any]]:
         headers = {"User-Agent": "AMZCatalog/1.0 (metadata sync)", "Accept": "application/json"}
@@ -103,15 +106,11 @@ class WingetProvider:
             follow_redirects=True,
             headers=headers,
         ) as client:
-            first = await self._get_page(client, 0)
-            first_response = await client.get(
-                self.url,
-                params={"take": self.PAGE_SIZE, "page": 0, "sort": "Latest.Name", "order": 1},
-            )
-            first_response.raise_for_status()
-            payload = first_response.json()
-            total = int(payload.get("Total", 0)) if isinstance(payload, dict) else 0
-            rows = first
+            payload = await self._get_payload(client, 0)
+            rows = payload.get("Packages", [])
+            total = int(payload.get("Total", 0))
+            if not isinstance(rows, list):
+                raise ValueError("WinGet API returned an invalid package catalog")
             pages = (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE
             if pages > self.MAX_PAGES:
                 raise ValueError(
@@ -120,10 +119,16 @@ class WingetProvider:
             # The public API intermittently returns 503 when several pages are
             # requested together. Fetch in order and retry transient failures.
             for page in range(1, pages):
-                rows.extend(await self._get_page(client, page))
+                page_payload = await self._get_payload(client, page)
+                batch = page_payload.get("Packages", [])
+                if not isinstance(batch, list):
+                    raise ValueError(f"WinGet page {page} is invalid")
+                rows.extend(batch)
                 if page % 100 == 0:
-                    logger.warning("WinGet import progress: %d/%d pages (%d packages)",
-                                   page + 1, pages, len(rows))
+                    logger.warning(
+                        "WinGet import progress: %d/%d pages (%d packages)",
+                        page + 1, pages, len(rows),
+                    )
                 await asyncio.sleep(0.05)
 
             unique: dict[str, dict[str, Any]] = {}
@@ -132,6 +137,8 @@ class WingetProvider:
                     item = self._normalize(row)
                     if item:
                         unique[item["source_id"].casefold()] = item
-            logger.warning("WinGet catalog fetched: %d unique packages from %d API rows",
-                           len(unique), len(rows))
+            logger.warning(
+                "WinGet catalog fetched: %d unique packages from %d API rows",
+                len(unique), len(rows),
+            )
             return list(unique.values())
