@@ -87,9 +87,10 @@ async def sync_loop() -> None:
     logger.warning("AMZ catalog sync scheduler started")
     await asyncio.sleep(2)
     try:
-        if _is_due():
-            logger.warning("AMZ scheduled catalog synchronization starting")
-            result = await run_sync()
+        force_startup = os.getenv("AMZ_FORCE_SYNC_ON_START", "0") == "1"
+        if force_startup or _is_due():
+            logger.warning("AMZ catalog synchronization starting (forced=%s)", force_startup)
+            result = await run_sync(force=force_startup)
         else:
             result = {"status": "fresh", "providers": []}
             logger.warning("AMZ catalog is fresh; next scheduled check will follow the 6-hour interval")
