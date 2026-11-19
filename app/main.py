@@ -53,14 +53,29 @@ async def admin_headers(request: Request, call_next):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request, q: str = "", os: str = "", category: str = ""):
-    items, total = db.list_software(q, os, category)
+async def home(
+    request: Request,
+    q: str = Query("", max_length=80),
+    os: str = Query("", max_length=40),
+    category: str = Query("", max_length=80),
+    page: int = Query(1, ge=1, le=100000),
+):
+    per_page = 36
+    items, total = db.list_software(q, os, category, limit=per_page, offset=(page - 1) * per_page)
     categories, systems = db.get_facets()
+    page_count = max(1, (total + per_page - 1) // per_page)
+    page = min(page, page_count)
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"items": items, "total": total, "q": q, "selected_os": os, "selected_category": category,
-                 "categories": categories, "systems": systems, "last_sync": db.last_success(), "safe_url": safe_external_url, "icon_url": safe_external_url},
+        context={
+            "items": items, "total": total, "q": q, "selected_os": os,
+            "selected_category": category, "categories": categories, "systems": systems,
+            "last_sync": db.last_success(), "safe_url": safe_external_url,
+            "icon_url": safe_external_url, "page": page, "page_count": page_count,
+            "per_page": per_page, "first_result": ((page - 1) * per_page + 1) if total else 0,
+            "last_result": min(page * per_page, total),
+        },
     )
 
 
