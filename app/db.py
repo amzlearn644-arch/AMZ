@@ -187,7 +187,7 @@ def upsert_many(items: list[dict[str, Any]]) -> int:
     return len(items)
 
 
-def list_software(query: str = "", os_name: str = "", category: str = "", limit: int = 48, offset: int = 0) -> tuple[list[dict[str, Any]], int]:
+def list_software(query: str = "", os_name: str = "", category: str = "", limit: int = 48, offset: int = 0, sort: str = "name") -> tuple[list[dict[str, Any]], int]:
     clauses: list[str] = []
     params: list[Any] = []
     if query.strip():
@@ -204,7 +204,12 @@ def list_software(query: str = "", os_name: str = "", category: str = "", limit:
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     with connection() as conn:
         total = conn.execute("SELECT COUNT(*) FROM software" + where, params).fetchone()[0]
-        rows = conn.execute("SELECT * FROM software" + where + " ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?", [*params, max(1, min(limit, 100)), max(0, offset)]).fetchall()
+        order_by = {
+            "name": "name COLLATE NOCASE ASC, id ASC",
+            "newest": "updated_at DESC, id DESC",
+            "name_desc": "name COLLATE NOCASE DESC, id DESC",
+        }.get(sort, "name COLLATE NOCASE ASC, id ASC")
+        rows = conn.execute("SELECT * FROM software" + where + " ORDER BY " + order_by + " LIMIT ? OFFSET ?", [*params, max(1, min(limit, 100)), max(0, offset)]).fetchall()
     return [dict(row) for row in rows], total
 
 
