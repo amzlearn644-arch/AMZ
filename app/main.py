@@ -84,7 +84,7 @@ async def home(
 @app.get("/robots.txt", include_in_schema=False)
 async def robots_txt(request: Request):
     base = str(request.base_url).rstrip("/")
-    content = f"User-agent: *\\nAllow: /\\nDisallow: /admin\\nDisallow: /api/\\nSitemap: {base}/sitemap.xml\\n"
+    content = f"User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nSitemap: {base}/sitemap.xml\n"
     return Response(content=content, media_type="text/plain; charset=utf-8")
 
 
