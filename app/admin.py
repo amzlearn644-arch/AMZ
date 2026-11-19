@@ -456,8 +456,14 @@ def _validate_api_form(form: dict[str, str], existing: dict | None = None) -> tu
 @router.get("/apis", response_class=HTMLResponse)
 async def api_source_list(request: Request):
     _guard(request)
+    from .providers import configured_providers
+    builtin_providers = [
+        {"name": provider.name, "url": getattr(provider, "url", getattr(provider, "index_url", getattr(provider, "API_URL", "")))}
+        for provider in configured_providers()
+    ]
     return _render(request, "admin_apis.html", {
         "active": "apis", "sources": db.list_api_sources(), "states": db.get_sync_states(),
+        "builtin_providers": builtin_providers,
         "sync_message": request.query_params.get("sync", ""),
     })
 
