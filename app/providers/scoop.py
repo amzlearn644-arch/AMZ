@@ -48,7 +48,7 @@ class ScoopProvider:
                 str(row.get("name", "")) for row in files
                 if isinstance(row, dict) and row.get("type") == "file"
                 and str(row.get("name", "")).endswith(".json")
-                and re.fullmatch(r"[A-Za-z0-9._+-]+\\.json", str(row.get("name", "")))
+                and re.fullmatch(r"[A-Za-z0-9._+-]+\.json", str(row.get("name", "")))
             ][: self.MAX_ITEMS]
             semaphore = asyncio.Semaphore(8)
 
