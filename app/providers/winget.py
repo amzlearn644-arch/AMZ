@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+import logging
 import re
 from typing import Any
 
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class WingetProvider:
@@ -50,39 +53,85 @@ class WingetProvider:
             "source": "Winget", "source_id": package_id[:300],
         }
 
+    async def _get_page(self, client: httpx.AsyncClient, page: int) -> list[dict[str, Any]]:
+        params = {"take": self.PAGE_SIZE, "page": page, "sort": "Latest.Name", "order": 1}
+        last_error: Exception | None = None
+        for attempt in range(7):
+            try:
+                response = await client.get(self.url, params=params)
+                if response.status_code in {429, 500, 502, 503, 504}:
+                    retry_after = response.headers.get("Retry-After", "")
+                    try:
+                        delay = min(30.0, max(1.0, float(retry_after)))
+                    except (TypeError, ValueError):
+                        delay = min(30.0, 1.5 ** attempt)
+                    last_error = httpx.HTTPStatusError(
+                        f"WinGet page {page}: HTTP {response.status_code}",
+                        request=response.request, response=response,
+                    )
+                    logger.warning("WinGet page %d returned HTTP %d; retry %d/7 in %.1fs",
+                                   page, response.status_code, attempt + 1, delay)
+                    if attempt < 6:
+                        await asyncio.sleep(delay)
+                        continue
+                    raise last_error
+                response.raise_for_status()
+                data = response.json()
+                result = data.get("Packages", []) if isinstance(data, dict) else []
+                if not isinstance(result, list):
+                    raise ValueError(f"WinGet page {page} is invalid")
+                return result
+            except httpx.RequestError as exc:
+                last_error = exc
+                if attempt >= 6:
+                    raise
+                delay = min(30.0, 1.5 ** attempt)
+                logger.warning("WinGet page %d network error; retry %d/7 in %.1fs: %s",
+                               page, attempt + 1, delay, exc)
+                await asyncio.sleep(delay)
+        if last_error:
+            raise last_error
+        return []
+
     async def fetch(self) -> list[dict[str, Any]]:
         headers = {"User-Agent": "AMZCatalog/1.0 (metadata sync)", "Accept": "application/json"}
         token = os.getenv("WINGET_RUN_TOKEN", "").strip()
         if token:
             headers["xxx-access-token"] = f"Bearer {token}"
-        async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=10.0), follow_redirects=True, headers=headers) as client:
-            first = await client.get(self.url, params={"take": self.PAGE_SIZE, "page": 0, "sort": "Latest.Name", "order": 1})
-            first.raise_for_status()
-            payload = first.json()
-            rows = payload.get("Packages") if isinstance(payload, dict) else None
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=15.0),
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            first = await self._get_page(client, 0)
+            first_response = await client.get(
+                self.url,
+                params={"take": self.PAGE_SIZE, "page": 0, "sort": "Latest.Name", "order": 1},
+            )
+            first_response.raise_for_status()
+            payload = first_response.json()
             total = int(payload.get("Total", 0)) if isinstance(payload, dict) else 0
-            if not isinstance(rows, list):
-                raise ValueError("WinGet API returned an invalid package catalog")
+            rows = first
             pages = (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE
             if pages > self.MAX_PAGES:
-                raise ValueError(f"WinGet catalog has {total} entries; raise WINGET_MAX_PAGES above {self.MAX_PAGES}")
-            semaphore = asyncio.Semaphore(4)
-            async def get_page(page: int) -> list[dict[str, Any]]:
-                async with semaphore:
-                    response = await client.get(self.url, params={"take": self.PAGE_SIZE, "page": page, "sort": "Latest.Name", "order": 1})
-                    response.raise_for_status()
-                    data = response.json()
-                    result = data.get("Packages", []) if isinstance(data, dict) else []
-                    if not isinstance(result, list):
-                        raise ValueError(f"WinGet page {page} is invalid")
-                    return result
-            batches = await asyncio.gather(*(get_page(page) for page in range(1, pages)))
-            for batch in batches:
-                rows.extend(batch)
+                raise ValueError(
+                    f"WinGet catalog has {total} entries; raise WINGET_MAX_PAGES above {self.MAX_PAGES}"
+                )
+            # The public API intermittently returns 503 when several pages are
+            # requested together. Fetch in order and retry transient failures.
+            for page in range(1, pages):
+                rows.extend(await self._get_page(client, page))
+                if page % 100 == 0:
+                    logger.warning("WinGet import progress: %d/%d pages (%d packages)",
+                                   page + 1, pages, len(rows))
+                await asyncio.sleep(0.05)
+
             unique: dict[str, dict[str, Any]] = {}
             for row in rows:
                 if isinstance(row, dict):
                     item = self._normalize(row)
                     if item:
                         unique[item["source_id"].casefold()] = item
+            logger.warning("WinGet catalog fetched: %d unique packages from %d API rows",
+                           len(unique), len(rows))
             return list(unique.values())
