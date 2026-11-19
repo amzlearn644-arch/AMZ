@@ -46,7 +46,7 @@
         <a class="chip {% if not selected_os %}active{% endif %}" href="/?q={{ q|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">همه</a>
         {% for system in systems %}<a class="chip {% if selected_os == system %}active{% endif %}" href="/?q={{ q|urlencode }}&os={{ system|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">{{ system }}</a>{% endfor %}
       </div>
-      <form method="get" class="category-select"><input type="hidden" name="q" value="{{ q }}">{% if selected_os %}<input type="hidden" name="os" value="{{ selected_os }}">{% endif %}<label for="category">دسته:</label><select name="category" id="category" onchange="this.form.submit()"><option value="">همهٔ دسته‌ها</option>{% for category in categories %}<option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select></form>
+      <form method="get" class="category-select"><input type="hidden" name="q" value="{{ q }}"><label for="sort">مرتب‌سازی:</label><select name="sort" id="sort" onchange="this.form.submit()"><option value="name" {% if sort == "name" %}selected{% endif %}>نام نرم‌افزار</option><option value="newest" {% if sort == "newest" %}selected{% endif %}>جدیدترین بروزرسانی</option><option value="name_desc" {% if sort == "name_desc" %}selected{% endif %}>نام (نزولی)</option></select>{% if selected_os %}<input type="hidden" name="os" value="{{ selected_os }}">{% endif %}<label for="category">دسته:</label><select name="category" id="category" onchange="this.form.submit()"><option value="">همهٔ دسته‌ها</option>{% for category in categories %}<option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select></form>
     </div>
     {% if items %}
     <div class="software-grid">
@@ -71,9 +71,9 @@
     {% endif %}
     {% if page_count > 1 %}
     <nav class="pagination" aria-label="صفحه‌های کاتالوگ">
-      {% if page > 1 %}<a class="page-link page-prev" href="/?q={{ q|urlencode }}&os={{ selected_os|urlencode }}&category={{ selected_category|urlencode }}&page={{ page - 1 }}" rel="prev">→ قبلی</a>{% endif %}
+      {% if page > 1 %}<a class="page-link page-prev" href="/?q={{ q|urlencode }}&os={{ selected_os|urlencode }}&category={{ selected_category|urlencode }}&sort={{ sort|urlencode }}&page={{ page - 1 }}" rel="prev">→ قبلی</a>{% endif %}
       <span class="page-indicator">صفحهٔ {{ page }} از {{ page_count }}</span>
-      {% if page < page_count %}<a class="page-link page-next" href="/?q={{ q|urlencode }}&os={{ selected_os|urlencode }}&category={{ selected_category|urlencode }}&page={{ page + 1 }}" rel="next">بعدی ←</a>{% endif %}
+      {% if page < page_count %}<a class="page-link page-next" href="/?q={{ q|urlencode }}&os={{ selected_os|urlencode }}&category={{ selected_category|urlencode }}&sort={{ sort|urlencode }}&page={{ page + 1 }}" rel="next">بعدی ←</a>{% endif %}
     </nav>
     {% endif %}
   </section>
