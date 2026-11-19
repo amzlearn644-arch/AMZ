@@ -39,9 +39,19 @@ class WingetProvider:
 
     @staticmethod
     def _latest_version(names: list[str]) -> str | None:
-        def version_key(value: str) -> tuple[Any, ...]:
-            return tuple(int(part) if part.isdigit() else part.lower() for part in re.findall(r"\d+|[A-Za-z]+", value))
-        candidates = [name for name in names if re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+_-]{0,79}", name)]
+        def version_key(value: str) -> tuple[tuple[int, Any], ...]:
+            # Keep numeric and textual tokens in separate comparable types.
+            # Python cannot compare an int directly with a str.
+            tokens = re.findall(r"\d+|[A-Za-z]+", value)
+            return tuple(
+                (0, int(token)) if token.isdigit() else (1, token.casefold())
+                for token in tokens
+            )
+
+        candidates = [
+            name for name in names
+            if re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+_-]{0,79}", name)
+        ]
         return max(candidates, key=version_key) if candidates else None
 
     async def fetch(self) -> list[dict[str, Any]]:
