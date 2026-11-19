@@ -52,7 +52,7 @@ class FdroidProvider:
 
     def _download_url(self, version: dict[str, Any]) -> str:
         file_name = str(version.get("apkName") or "").strip()
-        if not re.fullmatch(r"[A-Za-z0-9._+-]+\\.apk", file_name):
+        if not re.fullmatch(r"[A-Za-z0-9._+-]+\.apk", file_name):
             return ""
         url = self.repo_base + quote(file_name, safe="._+-")
         if urlparse(url).hostname != self.repo_host:
