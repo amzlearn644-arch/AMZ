@@ -83,7 +83,7 @@ async def home(
 
 @app.get("/robots.txt", include_in_schema=False)
 async def robots_txt(request: Request):
-    base = str(request.base_url).rstrip("/")
+    base = os.getenv("AMZ_PUBLIC_URL", str(request.base_url)).rstrip("/")
     content = f"User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nSitemap: {base}/sitemap.xml\n"
     return Response(content=content, media_type="text/plain; charset=utf-8")
 
@@ -112,11 +112,11 @@ async def software_detail(request: Request, slug: str):
     item["download_url"] = safe_external_url(item["download_url"])
     item["homepage_url"] = safe_external_url(item["homepage_url"])
     item["icon_url"] = safe_external_url(item["icon_url"])
-    return templates.TemplateResponse(request=request, name="detail.html", context={"item": item, "canonical_url": str(request.base_url).rstrip("/") + "/software/" + item["slug"]})
+    return templates.TemplateResponse(request=request, name="detail.html", context={"item": item, "canonical_url": os.getenv("AMZ_PUBLIC_URL", str(request.base_url)).rstrip("/") + "/software/" + item["slug"]})
 
 
 @app.get("/api/software")
-async def api_software(q: str = "", os: str = "", category: str = "", limit: int = Query(48, ge=1, le=100), offset: int = Query(0, ge=0)):
+async def api_software(q: str = Query("", max_length=80), os: str = Query("", max_length=40), category: str = Query("", max_length=80), limit: int = Query(48, ge=1, le=100), offset: int = Query(0, ge=0)):
     items, total = db.list_software(q, os, category, limit, offset)
     for item in items:
         item["download_url"] = safe_external_url(item["download_url"])
