@@ -82,16 +82,21 @@ async def run_sync(
 
 
 async def sync_loop() -> None:
+    logger.warning("AMZ catalog sync scheduler started")
     await asyncio.sleep(2)
-    force_startup = os.getenv("AMZ_FORCE_SYNC_ON_START", "1") == "1"
+    try:
+        logger.warning("AMZ initial full catalog synchronization starting")
+        result = await run_sync(force=True)
+        logger.warning(
+            "AMZ initial catalog synchronization finished: status=%s providers=%d",
+            result.get("status"), len(result.get("providers", [])),
+        )
+    except Exception:
+        logger.exception("AMZ initial catalog synchronization failed")
     while True:
         try:
-            if force_startup:
-                logger.info("Forced initial catalog synchronization requested")
-                await run_sync(force=True)
-                force_startup = False
-            elif _is_due():
+            if _is_due():
                 await run_sync()
         except Exception:
             logger.exception("Sync scheduler iteration failed")
-        await asyncio.sleep(max(60, int(os.getenv("AMZ_SYNC_CHECK_SECONDS", "120"))))
+        await asyncio.sleep(max(60, int(os.getenv("AMZ_SYNC_CHECK_SECONDS", "1800"))))
