@@ -165,3 +165,9 @@ async def api_sync(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "catalog_size": db.list_software(limit=1)[1]}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/favicon.svg", status_code=307)
