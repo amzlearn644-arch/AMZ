@@ -87,18 +87,36 @@ async def sync_loop() -> None:
     logger.warning("AMZ catalog sync scheduler started")
     await asyncio.sleep(2)
     try:
-        logger.warning("AMZ initial full catalog synchronization starting")
-        result = await run_sync(force=True)
+        if _is_due():
+            logger.warning("AMZ scheduled catalog synchronization starting")
+            result = await run_sync()
+        else:
+            result = {"status": "fresh", "providers": []}
+            logger.warning("AMZ catalog is fresh; next scheduled check will follow the 6-hour interval")
+        total = db.list_software(limit=1)[1]
+        windows = db.list_software(os_name="Windows", limit=1)[1]
+        android = db.list_software(os_name="Android", limit=1)[1]
+        provider_summary = ", ".join(
+            f"{item.get('provider')}={item.get('count', 0)}"
+            for item in result.get("providers", [])
+        )
         logger.warning(
-            "AMZ initial catalog synchronization finished: status=%s providers=%d",
-            result.get("status"), len(result.get("providers", [])),
+            "AMZ catalog status=%s total=%d Windows=%d Android=%d providers=[%s]",
+            result.get("status"), total, windows, android, provider_summary,
         )
     except Exception:
-        logger.exception("AMZ initial catalog synchronization failed")
+        logger.exception("AMZ initial catalog status check failed")
     while True:
         try:
             if _is_due():
-                await run_sync()
+                result = await run_sync()
+                total = db.list_software(limit=1)[1]
+                windows = db.list_software(os_name="Windows", limit=1)[1]
+                android = db.list_software(os_name="Android", limit=1)[1]
+                logger.warning(
+                    "AMZ catalog refreshed: status=%s total=%d Windows=%d Android=%d",
+                    result.get("status"), total, windows, android,
+                )
         except Exception:
             logger.exception("Sync scheduler iteration failed")
         await asyncio.sleep(max(60, int(os.getenv("AMZ_SYNC_CHECK_SECONDS", "1800"))))
