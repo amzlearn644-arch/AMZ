@@ -41,9 +41,6 @@ class ScoopProvider:
         github_token = os.getenv("GITHUB_TOKEN", "").strip()
         if github_token:
             headers["Authorization"] = f"Bearer {github_token}"
-        token = __import__("os").getenv("GITHUB_TOKEN", "").strip()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
         timeout = httpx.Timeout(20.0, connect=6.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
             response = await client.get(self.API_URL, params={"per_page": 1000})
