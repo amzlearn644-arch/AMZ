@@ -69,6 +69,16 @@ class CatalogTests(unittest.TestCase):
 
 
 class SyncTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.old_path = db.DB_PATH
+        db.DB_PATH = Path(self.temp_dir.name) / "sync.sqlite3"
+        db.init_db()
+
+    def tearDown(self):
+        db.DB_PATH = self.old_path
+        self.temp_dir.cleanup()
+
     async def test_failed_provider_does_not_delete_old_data(self):
         provider = type("Failing", (), {"name": "offline", "fetch": AsyncMock(side_effect=OSError("offline"))})()
         old_path = db.DB_PATH
