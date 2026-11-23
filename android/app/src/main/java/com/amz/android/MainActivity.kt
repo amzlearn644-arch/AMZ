@@ -358,7 +358,7 @@ private fun MusicHome(
                     exit = fadeOut() + slideOutVertically { it / 3 }
                 ) {
                     currentTrack?.let { track -> MiniPlayer(
-                        track = currentTrack,
+                        track = track,
                         isPlaying = isPlaying,
                         onOpen = { showPlayer = true },
                         onPlayPause = { if (isPlaying) controller?.pause() else controller?.play() },
@@ -428,7 +428,7 @@ private fun MusicHome(
                         Text(txt(language, "${tracks.size} آهنگ در گوشی", "${tracks.size} songs on device"), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
                         Text(txt(language, "بدون اینترنت • بدون سرور", "Offline • No server needed"), color = Color(0xFFAAB5A8), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                     }
-                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFB8F36B), modifier = Modifier.size(48.dp))
+                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFC6A56A), modifier = Modifier.size(48.dp))
                 }
             }
 
