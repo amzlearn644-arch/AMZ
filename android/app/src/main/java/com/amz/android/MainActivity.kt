@@ -351,12 +351,12 @@ private fun MusicHome(
                     )
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().background(Color(0xFF101410)).padding(horizontal = 12.dp, vertical = 8.dp)
+                    modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp, vertical = 8.dp)
                         .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf("آهنگ‌ها", "آلبوم‌ها", "هنرمندان", "پسندیده‌ها").forEachIndexed { index, label ->
+                    listOf(txt(language, "آهنگ‌ها", "Songs"), txt(language, "آلبوم‌ها", "Albums"), txt(language, "هنرمندان", "Artists"), txt(language, "پسندیده‌ها", "Favorites")).forEachIndexed { index, label ->
                         Column(
                             modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
                                 .clickable { selectedTab = index }.padding(vertical = 7.dp),
@@ -401,7 +401,7 @@ private fun MusicHome(
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A241B))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(17.dp),
@@ -493,10 +493,11 @@ private fun MusicHome(
     if (showPlayer && currentTrack != null) {
         ModalBottomSheet(
             onDismissRequest = { showPlayer = false },
-            containerColor = Color(0xFF111712),
+            containerColor = MaterialTheme.colorScheme.surface,
             dragHandle = { }
         ) {
             FullPlayer(
+                language = language,
                 track = currentTrack,
                 isPlaying = isPlaying,
                 position = position,
@@ -611,7 +612,7 @@ private fun MiniPlayer(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)
-            .clip(RoundedCornerShape(18.dp)).background(Color(0xFF202920))
+            .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onOpen).padding(9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -631,6 +632,7 @@ private fun MiniPlayer(
 
 @Composable
 private fun FullPlayer(
+    language: String,
     track: AudioTrack,
     isPlaying: Boolean,
     position: Long,
@@ -653,7 +655,7 @@ private fun FullPlayer(
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "بازگشت") }
-            Text("در حال پخش", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.SemiBold)
+            Text(txt(language, "در حال پخش", "Now playing"), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = onFavorite) {
                 Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = null, tint = if (favorite) Color(0xFFB8F36B) else Color.White)
             }
