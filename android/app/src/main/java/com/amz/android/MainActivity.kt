@@ -611,7 +611,7 @@ private fun TrackRow(
         }
         Text(formatTime(track.duration), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         IconButton(onClick = onFavorite) {
-            Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "پسندیدن", tint = if (favorite) Color(0xFFB8F36B) else Color.Gray, modifier = Modifier.size(19.dp))
+            Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "پسندیدن", tint = if (favorite) MaterialTheme.colorScheme.primary else Color.Gray, modifier = Modifier.size(19.dp))
         }
     }
 }
@@ -654,7 +654,7 @@ private fun MiniPlayer(
             Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color(0xFFAAB5A8), fontSize = 11.sp)
         }
         IconButton(onClick = onPlayPause) {
-            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFFB8F36B))
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
         IconButton(onClick = onNext) {
             Icon(Icons.Default.SkipNext, contentDescription = null)
@@ -689,7 +689,7 @@ private fun FullPlayer(
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "بازگشت") }
             Text(txt(language, "در حال پخش", "Now playing"), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = onFavorite) {
-                Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = null, tint = if (favorite) Color(0xFFB8F36B) else Color.White)
+                Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = null, tint = if (favorite) MaterialTheme.colorScheme.primary else Color.White)
             }
         }
         Spacer(Modifier.height(25.dp))
@@ -714,19 +714,19 @@ private fun FullPlayer(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onShuffle) {
-                Icon(Icons.Default.Shuffle, contentDescription = "تصادفی", tint = if (shuffle) Color(0xFFB8F36B) else Color.Gray)
+                Icon(Icons.Default.Shuffle, contentDescription = "تصادفی", tint = if (shuffle) MaterialTheme.colorScheme.primary else Color.Gray)
             }
             IconButton(onClick = onPrevious, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Default.SkipPrevious, contentDescription = "قبلی", modifier = Modifier.size(32.dp))
             }
-            IconButton(onClick = onPlayPause, modifier = Modifier.size(70.dp).clip(CircleShape).background(Color(0xFFB8F36B))) {
+            IconButton(onClick = onPlayPause, modifier = Modifier.size(70.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)) {
                 Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = "پخش یا توقف", tint = Color(0xFF17210B), modifier = Modifier.size(38.dp))
             }
             IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
                 Icon(Icons.Default.SkipNext, contentDescription = "بعدی", modifier = Modifier.size(32.dp))
             }
             IconButton(onClick = onRepeat) {
-                Icon(if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, contentDescription = "تکرار", tint = if (repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFB8F36B) else Color.Gray)
+                Icon(if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, contentDescription = "تکرار", tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else Color.Gray)
             }
         }
         Spacer(Modifier.height(18.dp))
