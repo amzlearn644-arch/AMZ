@@ -28,10 +28,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowBack
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,7 +69,9 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,10 +80,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -154,13 +161,35 @@ class MainActivity : ComponentActivity() {
         }, ContextCompat.getMainExecutor(this))
 
         setContent {
-            AMZMusicTheme {
-                MusicHome(
-                    tracks = tracks,
-                    controller = mediaController,
-                    hasPermission = hasPermission,
-                    onRequestPermission = { permissionLauncher.launch(permission) }
-                )
+            val preferences = getSharedPreferences("amz_music_settings", MODE_PRIVATE)
+            var language by remember { mutableStateOf(preferences.getString("language", "fa") ?: "fa") }
+            var themeChoice by remember { mutableStateOf(preferences.getString("theme", "dark") ?: "dark") }
+            var accentChoice by remember { mutableStateOf(preferences.getString("accent", "lime") ?: "lime") }
+
+            CompositionLocalProvider(
+                LocalLayoutDirection provides if (language == "fa") LayoutDirection.Rtl else LayoutDirection.Ltr
+            ) {
+                AMZMusicTheme(themeChoice, accentChoice) {
+                    MusicHome(
+                        tracks = tracks,
+                        controller = mediaController,
+                        hasPermission = hasPermission,
+                        language = language,
+                        themeChoice = themeChoice,
+                        accentChoice = accentChoice,
+                        onSettingsChange = { newLanguage, newTheme, newAccent ->
+                            language = newLanguage
+                            themeChoice = newTheme
+                            accentChoice = newAccent
+                            preferences.edit()
+                                .putString("language", newLanguage)
+                                .putString("theme", newTheme)
+                                .putString("accent", newAccent)
+                                .apply()
+                        },
+                        onRequestPermission = { permissionLauncher.launch(permission) }
+                    )
+                }
             }
         }
     }
@@ -218,16 +247,43 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AMZMusicTheme(content: @Composable () -> Unit) {
-    val colors = darkColorScheme(
-        primary = Color(0xFFB8F36B),
-        onPrimary = Color(0xFF17210B),
-        background = Color(0xFF090B0A),
-        surface = Color(0xFF151916),
-        surfaceVariant = Color(0xFF222923),
-        onSurface = Color(0xFFF2F5EF),
-        onSurfaceVariant = Color(0xFFA2ADA2)
-    )
+private fun AMZMusicTheme(
+    themeChoice: String,
+    accentChoice: String,
+    content: @Composable () -> Unit
+) {
+    val dark = when (themeChoice) {
+        "light" -> false
+        "dark" -> true
+        else -> isSystemInDarkTheme()
+    }
+    val accent = when (accentChoice) {
+        "blue" -> Color(0xFF65A9FF)
+        "purple" -> Color(0xFFB69CFF)
+        "pink" -> Color(0xFFFF8EB8)
+        else -> Color(0xFFB8F36B)
+    }
+    val colors = if (dark) {
+        darkColorScheme(
+            primary = accent,
+            onPrimary = Color(0xFF17210B),
+            background = Color(0xFF090B0A),
+            surface = Color(0xFF151916),
+            surfaceVariant = Color(0xFF222923),
+            onSurface = Color(0xFFF2F5EF),
+            onSurfaceVariant = Color(0xFFA2ADA2)
+        )
+    } else {
+        lightColorScheme(
+            primary = accent,
+            onPrimary = Color.White,
+            background = Color(0xFFF5F7F3),
+            surface = Color(0xFFFFFFFF),
+            surfaceVariant = Color(0xFFE8EDE7),
+            onSurface = Color(0xFF182019),
+            onSurfaceVariant = Color(0xFF647064)
+        )
+    }
     MaterialTheme(colorScheme = colors, content = content)
 }
 
@@ -237,8 +293,13 @@ private fun MusicHome(
     tracks: List<AudioTrack>,
     controller: MediaController?,
     hasPermission: Boolean,
+    language: String,
+    themeChoice: String,
+    accentChoice: String,
+    onSettingsChange: (String, String, String) -> Unit,
     onRequestPermission: () -> Unit
 ) {
+    var showSettings by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
     var query by remember { mutableStateOf("") }
     var showPlayer by remember { mutableStateOf(false) }
@@ -327,13 +388,13 @@ private fun MusicHome(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("AMZ MUSIC", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Text("موسیقی، به سبک تو", fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                    Text(txt(language, "موسیقی، به سبک تو", "Music, your way"), fontSize = 27.sp, fontWeight = FontWeight.Bold)
                 }
-                Box(
-                    modifier = Modifier.size(46.dp).clip(CircleShape).background(Color(0xFF1F2A20)),
-                    contentAlignment = Alignment.Center
+                IconButton(
+                    onClick = { showSettings = true },
+                    modifier = Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Icon(Icons.Default.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(25.dp))
+                    Icon(Icons.Default.Settings, contentDescription = txt(language, "تنظیمات", "Settings"), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                 }
             }
 
@@ -347,9 +408,9 @@ private fun MusicHome(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("کتابخانه موسیقی تو", color = Color(0xFFB8F36B), fontSize = 13.sp)
-                        Text("${tracks.size} آهنگ در گوشی", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
-                        Text("بدون اینترنت • بدون سرور", color = Color(0xFFAAB5A8), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                        Text(txt(language, "کتابخانه موسیقی تو", "Your music library"), color = Color(0xFFB8F36B), fontSize = 13.sp)
+                        Text(txt(language, "${tracks.size} آهنگ در گوشی", "${tracks.size} songs on device"), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
+                        Text(txt(language, "بدون اینترنت • بدون سرور", "Offline • No server needed"), color = Color(0xFFAAB5A8), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                     }
                     Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFB8F36B), modifier = Modifier.size(48.dp))
                 }
@@ -359,7 +420,7 @@ private fun MusicHome(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                placeholder = { Text("جست‌وجوی آهنگ، خواننده یا آلبوم") },
+                placeholder = { Text(txt(language, "جست‌وجوی آهنگ، خواننده یا آلبوم", "Search songs, artists or albums")) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp)
@@ -370,12 +431,12 @@ private fun MusicHome(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    when (selectedTab) { 1 -> "آلبوم‌ها"; 2 -> "هنرمندان"; 3 -> "آهنگ‌های پسندیده"; else -> "همه آهنگ‌ها" },
+                    when (selectedTab) { 1 -> txt(language, "آلبوم‌ها", "Albums"); 2 -> txt(language, "هنرمندان", "Artists"); 3 -> txt(language, "آهنگ‌های پسندیده", "Favorites"); else -> txt(language, "همه آهنگ‌ها", "All songs") },
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                Text("${filtered.size} مورد", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(txt(language, "${filtered.size} مورد", "${filtered.size} items"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 if (selectedTab == 0 && tracks.isNotEmpty()) {
                     IconButton(onClick = {
                         controller?.setMediaItems(tracks.map { it.toMediaItem() })
@@ -389,18 +450,18 @@ private fun MusicHome(
 
             if (!hasPermission) {
                 EmptyLibrary(
-                    title = "برای نمایش موسیقی‌ها اجازه دسترسی لازم است",
-                    action = "اجازه دسترسی",
+                    title = txt(language, "برای نمایش موسیقی‌ها اجازه دسترسی لازم است", "Audio permission is required to show music"),
+                    action = txt(language, "اجازه دسترسی", "Grant permission"),
                     onAction = onRequestPermission
                 )
             } else if (tracks.isEmpty()) {
                 EmptyLibrary(
-                    title = "هنوز آهنگی پیدا نشد",
-                    action = "بررسی دوباره",
+                    title = txt(language, "هنوز آهنگی پیدا نشد", "No music found yet"),
+                    action = txt(language, "بررسی دوباره", "Refresh library"),
                     onAction = onRequestPermission
                 )
             } else if (filtered.isEmpty()) {
-                EmptyLibrary(title = "موردی پیدا نشد", action = "پاک کردن جست‌وجو", onAction = { query = "" })
+                EmptyLibrary(title = txt(language, "موردی پیدا نشد", "No results found"), action = txt(language, "پاک کردن جست‌وجو", "Clear search"), onAction = { query = "" })
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -462,6 +523,17 @@ private fun MusicHome(
             )
         }
     }
+
+    if (showSettings) {
+        SettingsSheet(
+            language = language,
+            themeChoice = themeChoice,
+            accentChoice = accentChoice,
+            onDismiss = { showSettings = false },
+            onChange = onSettingsChange
+        )
+    }
+
 }
 
 private fun AudioTrack.toMediaItem(): MediaItem {
@@ -630,4 +702,117 @@ private fun FullPlayer(
 private fun formatTime(milliseconds: Long): String {
     val totalSeconds = (milliseconds.coerceAtLeast(0L) / 1000L)
     return String.format(Locale.getDefault(), "%d:%02d", totalSeconds / 60, totalSeconds % 60)
+}
+ 
+private fun txt(language: String, persian: String, english: String): String =
+    if (language == "en") english else persian
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsSheet(
+    language: String,
+    themeChoice: String,
+    accentChoice: String,
+    onDismiss: () -> Unit,
+    onChange: (String, String, String) -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 30.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(txt(language, "تنظیمات", "Settings"), fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp))
+            }
+            Text(txt(language, "شخصی‌سازی برنامه", "Personalization"), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            SettingsGroupTitle(txt(language, "زبان برنامه", "App language"))
+            SettingsChoiceRow(
+                options = listOf("fa" to "فارسی", "en" to "English"),
+                selected = language,
+                onSelect = { onChange(it, themeChoice, accentChoice) }
+            )
+            SettingsGroupTitle(txt(language, "پوسته برنامه", "App theme"))
+            SettingsChoiceRow(
+                options = listOf(
+                    "system" to txt(language, "هماهنگ با سیستم", "System"),
+                    "light" to txt(language, "روشن", "Light"),
+                    "dark" to txt(language, "تاریک", "Dark")
+                ),
+                selected = themeChoice,
+                onSelect = { onChange(language, it, accentChoice) }
+            )
+            SettingsGroupTitle(txt(language, "رنگ تأکیدی", "Accent color"))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    "lime" to Color(0xFFB8F36B),
+                    "blue" to Color(0xFF65A9FF),
+                    "purple" to Color(0xFFB69CFF),
+                    "pink" to Color(0xFFFF8EB8)
+                ).forEach { (key, color) ->
+                    Box(
+                        modifier = Modifier.size(42.dp).clip(CircleShape)
+                            .background(color)
+                            .clickable { onChange(language, themeChoice, key) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (accentChoice == key) {
+                            Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFF182019), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+            androidx.compose.material3.HorizontalDivider()
+            SettingsGroupTitle(txt(language, "درباره برنامه", "About"))
+            Text("AMZ Music  •  1.2", fontWeight = FontWeight.SemiBold)
+            Text(
+                txt(language, "موزیک‌پلیر آفلاین برای موسیقی‌های داخل گوشی", "An offline music player for audio stored on your device"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsGroupTitle(title: String) {
+    Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+}
+
+@Composable
+private fun SettingsChoiceRow(
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.forEach { (key, label) ->
+            val active = key == selected
+            Surface(
+                modifier = Modifier.weight(1f).clickable { onSelect(key) },
+                shape = RoundedCornerShape(14.dp),
+                color = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                border = if (active) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+            ) {
+                Text(
+                    label,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    fontSize = 12.sp,
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
 }
