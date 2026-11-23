@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Favorite
@@ -88,6 +90,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -172,7 +178,7 @@ class MainActivity : ComponentActivity() {
             val preferences = getSharedPreferences("amz_music_settings", MODE_PRIVATE)
             var language by remember { mutableStateOf(preferences.getString("language", "fa") ?: "fa") }
             var themeChoice by remember { mutableStateOf(preferences.getString("theme", "dark") ?: "dark") }
-            var accentChoice by remember { mutableStateOf(preferences.getString("accent", "gold") ?: "gold") }
+            var accentChoice by remember { mutableStateOf(preferences.getString("accent", "teal") ?: "teal") }
 
             CompositionLocalProvider(
                 LocalLayoutDirection provides if (language == "fa") LayoutDirection.Rtl else LayoutDirection.Ltr
@@ -269,31 +275,31 @@ private fun AMZMusicTheme(
         else -> isSystemInDarkTheme()
     }
     val accent = when (accentChoice) {
-        "blue" -> Color(0xFF65A9FF)
-        "purple" -> Color(0xFFB69CFF)
-        "pink" -> Color(0xFFFF8EB8)
-        "gold" -> Color(0xFFC6A56A)
-        else -> Color(0xFFC6A56A)
+        "teal" -> Color(0xFF25C9B8)
+        "aqua" -> Color(0xFF55E0D0)
+        "blue" -> Color(0xFF76B9F5)
+        "ice" -> Color(0xFFE8F5F4)
+        else -> Color(0xFF25C9B8)
     }
     val colors = if (dark) {
         darkColorScheme(
             primary = accent,
             onPrimary = Color(0xFF211B11),
-            background = Color(0xFF101114),
-            surface = Color(0xFF191B20),
-            surfaceVariant = Color(0xFF24272D),
-            onSurface = Color(0xFFF1EEE8),
-            onSurfaceVariant = Color(0xFFA6A39C)
+            background = Color(0xFF050D24),
+            surface = Color(0xFF0B1732),
+            surfaceVariant = Color(0xFF122344),
+            onSurface = Color(0xFFF4F7F8),
+            onSurfaceVariant = Color(0xFFAAB9CB)
         )
     } else {
         lightColorScheme(
             primary = accent,
             onPrimary = Color.White,
-            background = Color(0xFFF4F1EA),
-            surface = Color(0xFFFFFDF8),
-            surfaceVariant = Color(0xFFEAE4D8),
-            onSurface = Color(0xFF24221E),
-            onSurfaceVariant = Color(0xFF706B62)
+            background = Color(0xFFF1F6F7),
+            surface = Color(0xFFFFFFFF),
+            surfaceVariant = Color(0xFFE3EFF0),
+            onSurface = Color(0xFF08132D),
+            onSurfaceVariant = Color(0xFF536579)
         )
     }
     MaterialTheme(colorScheme = colors, content = content)
@@ -312,6 +318,7 @@ private fun MusicHome(
     onRequestPermission: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) }
     var query by remember { mutableStateOf("") }
     var showPlayer by remember { mutableStateOf(false) }
@@ -399,49 +406,22 @@ private fun MusicHome(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 14.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AMZBrandMark(Modifier.size(54.dp))
-                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                AMZBrandMark(Modifier.size(48.dp))
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 11.dp)) {
                     Text("AMZ MUSIC", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Text(txt(language, "موسیقی، به سبک تو", "Music, your way"), fontSize = 27.sp, fontWeight = FontWeight.Bold)
+                    Text(txt(language, "موسیقی، به سبک تو", "Music, your way"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
-                IconButton(
-                    onClick = { showSettings = true },
-                    modifier = Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = txt(language, "تنظیمات", "Settings"), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                IconButton(onClick = { showSearch = true }, modifier = Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    Icon(Icons.Default.Search, contentDescription = txt(language, "جست‌وجو", "Search"), tint = MaterialTheme.colorScheme.primary)
                 }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(17.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(txt(language, "کتابخانه موسیقی تو", "Your music library"), color = Color(0xFFC6A56A), fontSize = 13.sp)
-                        Text(txt(language, "${tracks.size} آهنگ در گوشی", "${tracks.size} songs on device"), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
-                        Text(txt(language, "بدون اینترنت • بدون سرور", "Offline • No server needed"), color = Color(0xFFAAB5A8), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-                    }
-                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFC6A56A), modifier = Modifier.size(48.dp))
+                Spacer(Modifier.width(5.dp))
+                IconButton(onClick = { showSettings = true }, modifier = Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    Icon(Icons.Default.Settings, contentDescription = txt(language, "تنظیمات", "Settings"), tint = MaterialTheme.colorScheme.primary)
                 }
             }
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                placeholder = { Text(txt(language, "جست‌وجوی آهنگ، خواننده یا آلبوم", "Search songs, artists or albums")) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp)
-            )
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -512,38 +492,61 @@ private fun MusicHome(
         }
     }
 
+    if (showSearch) {
+        Dialog(onDismissRequest = { showSearch = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp).padding(top = 18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showSearch = false }) { Icon(Icons.Default.ArrowBack, contentDescription = txt(language, "بازگشت", "Back")) }
+                        OutlinedTextField(
+                            value = query, onValueChange = { query = it }, modifier = Modifier.weight(1f),
+                            placeholder = { Text(txt(language, "نام آهنگ یا خواننده", "Song or artist")) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, contentDescription = txt(language, "پاک کردن", "Clear")) } },
+                            singleLine = true, shape = RoundedCornerShape(18.dp)
+                        )
+                    }
+                    Text(txt(language, "نتایج جست‌وجو", "Search results"), fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 20.dp, bottom = 10.dp))
+                    val searchResults = tracks.filter { it.title.contains(query, true) || it.artist.contains(query, true) || it.album.contains(query, true) }
+                    if (searchResults.isEmpty()) {
+                        Text(txt(language, "موردی پیدا نشد", "No results found"), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 30.dp))
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            items(searchResults, key = { it.id }) { track ->
+                                TrackRow(track, currentTrack?.id == track.id, track.id in favorites, onClick = {
+                                    val index = tracks.indexOfFirst { it.id == track.id }
+                                    controller?.setMediaItems(tracks.map { it.toMediaItem() }, index, 0L)
+                                    controller?.prepare(); controller?.play()
+                                    showSearch = false; showPlayer = true
+                                }, onFavorite = {
+                                    if (track.id in favorites) favorites.remove(track.id) else favorites.add(track.id)
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (showPlayer && currentTrack != null) {
-        ModalBottomSheet(
-            onDismissRequest = { showPlayer = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            dragHandle = { }
-        ) {
-            FullPlayer(
-                language = language,
-                track = currentTrack,
-                isPlaying = isPlaying,
-                position = position,
-                duration = duration,
-                shuffle = shuffle,
-                repeatMode = repeatMode,
-                favorite = currentTrack.id in favorites,
-                onBack = { showPlayer = false },
-                onPlayPause = { if (isPlaying) controller?.pause() else controller?.play() },
-                onPrevious = { controller?.seekToPreviousMediaItem() },
-                onNext = { controller?.seekToNextMediaItem() },
-                onSeek = { controller?.seekTo(it.toLong()) },
-                onShuffle = { controller?.shuffleModeEnabled = !shuffle },
-                onRepeat = {
-                    controller?.repeatMode = when (repeatMode) {
+        Dialog(onDismissRequest = { showPlayer = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+                FullPlayer(
+                    language = language, track = currentTrack, isPlaying = isPlaying,
+                    position = position, duration = duration, shuffle = shuffle, repeatMode = repeatMode,
+                    favorite = currentTrack.id in favorites, onBack = { showPlayer = false },
+                    onPlayPause = { if (isPlaying) controller?.pause() else controller?.play() },
+                    onPrevious = { controller?.seekToPreviousMediaItem() }, onNext = { controller?.seekToNextMediaItem() },
+                    onSeek = { controller?.seekTo(it.toLong()) }, onShuffle = { controller?.shuffleModeEnabled = !shuffle },
+                    onRepeat = { controller?.repeatMode = when (repeatMode) {
                         Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                         Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                         else -> Player.REPEAT_MODE_OFF
-                    }
-                },
-                onFavorite = {
-                    if (currentTrack.id in favorites) favorites.remove(currentTrack.id) else favorites.add(currentTrack.id)
-                }
-            )
+                    } },
+                    onFavorite = { if (currentTrack.id in favorites) favorites.remove(currentTrack.id) else favorites.add(currentTrack.id) }
+                )
+            }
         }
     }
 
@@ -571,24 +574,8 @@ private fun AudioTrack.toMediaItem(): MediaItem {
 
 @Composable
 private fun AMZBrandMark(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(17.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF29251F), Color(0xFF111317))))
-            .padding(2.dp)
-            .clip(RoundedCornerShape(15.dp))
-            .background(Color(0xFF17191D)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("AMZ", color = Color(0xFFC6A56A), fontSize = 16.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                listOf(7, 13, 9, 16, 6).forEach { height ->
-                    Box(Modifier.width(3.dp).height(height.dp).clip(CircleShape).background(Color(0xFFC6A56A)))
-                }
-            }
-        }
-    }
+    Image(painter = painterResource(id = R.drawable.amz_music_logo), contentDescription = "AMZ Music",
+        modifier = modifier.clip(RoundedCornerShape(13.dp)), contentScale = ContentScale.Crop)
 }
 
 @Composable
@@ -619,7 +606,7 @@ private fun TrackRow(
     ) {
         AlbumTile(track.albumId, Modifier.size(49.dp))
         Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, color = if (active) Color(0xFFB8F36B) else MaterialTheme.colorScheme.onSurface)
+            Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
         }
         Text(formatTime(track.duration), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
@@ -632,10 +619,10 @@ private fun TrackRow(
 @Composable
 private fun AlbumTile(seed: Long, modifier: Modifier = Modifier) {
     val palettes = listOf(
-        listOf(Color(0xFF334D3B), Color(0xFF18251B)),
-        listOf(Color(0xFF4B385F), Color(0xFF241C30)),
-        listOf(Color(0xFF72523A), Color(0xFF2B2118)),
-        listOf(Color(0xFF31536A), Color(0xFF172733))
+        listOf(Color(0xFF1C8F8D), Color(0xFF07152F)),
+        listOf(Color(0xFF3A9EAB), Color(0xFF102440)),
+        listOf(Color(0xFF356D9B), Color(0xFF09152C)),
+        listOf(Color(0xFF6B9EA5), Color(0xFF172B42))
     )
     val colors = palettes[(kotlin.math.abs(seed) % palettes.size).toInt()]
     Box(
@@ -800,10 +787,10 @@ private fun SettingsSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(
-                    "gold" to Color(0xFFC6A56A),
-                    "blue" to Color(0xFF65A9FF),
-                    "purple" to Color(0xFFB69CFF),
-                    "pink" to Color(0xFFFF8EB8)
+                    "teal" to Color(0xFF25C9B8),
+                    "aqua" to Color(0xFF55E0D0),
+                    "blue" to Color(0xFF76B9F5),
+                    "ice" to Color(0xFFE8F5F4)
                 ).forEach { (key, color) ->
                     Box(
                         modifier = Modifier.size(42.dp).clip(CircleShape)
