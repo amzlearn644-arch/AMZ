@@ -104,7 +104,7 @@ private data class AudioTrack(
 )
 
 class MainActivity : ComponentActivity() {
-    private var mediaController: MediaController? = null
+    private var mediaController by mutableStateOf<MediaController?>(null)
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private val tracks = mutableStateListOf<AudioTrack>()
     private var hasPermission by mutableStateOf(false)
