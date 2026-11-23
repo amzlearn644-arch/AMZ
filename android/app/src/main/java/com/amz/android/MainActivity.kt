@@ -775,6 +775,7 @@ private fun SettingsSheet(
             androidx.compose.material3.HorizontalDivider()
             SettingsGroupTitle(txt(language, "درباره برنامه", "About"))
             Text("AMZ Music  •  1.2", fontWeight = FontWeight.SemiBold)
+            Text("Created by Amin", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
             Text(
                 txt(language, "موزیک‌پلیر آفلاین برای موسیقی‌های داخل گوشی", "An offline music player for audio stored on your device"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
