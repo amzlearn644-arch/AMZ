@@ -12,6 +12,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -107,6 +113,7 @@ private data class AudioTrack(
     val album: String,
     val albumId: Long,
     val duration: Long,
+    val dateAdded: Long,
     val uri: Uri
 )
 
@@ -164,7 +171,7 @@ class MainActivity : ComponentActivity() {
             val preferences = getSharedPreferences("amz_music_settings", MODE_PRIVATE)
             var language by remember { mutableStateOf(preferences.getString("language", "fa") ?: "fa") }
             var themeChoice by remember { mutableStateOf(preferences.getString("theme", "dark") ?: "dark") }
-            var accentChoice by remember { mutableStateOf(preferences.getString("accent", "lime") ?: "lime") }
+            var accentChoice by remember { mutableStateOf(preferences.getString("accent", "gold") ?: "gold") }
 
             CompositionLocalProvider(
                 LocalLayoutDirection provides if (language == "fa") LayoutDirection.Rtl else LayoutDirection.Ltr
@@ -203,10 +210,11 @@ class MainActivity : ComponentActivity() {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATE_ADDED
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC, ${MediaStore.Audio.Media._ID} DESC"
         try {
             contentResolver.query(collection, projection, selection, null, sortOrder)?.use { cursor: Cursor ->
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
@@ -215,6 +223,7 @@ class MainActivity : ComponentActivity() {
                 val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     val title = cursor.getString(titleCol)?.takeIf { it.isNotBlank() } ?: "آهنگ بدون نام"
@@ -227,6 +236,7 @@ class MainActivity : ComponentActivity() {
                         album = album,
                         albumId = cursor.getLong(albumIdCol),
                         duration = cursor.getLong(durationCol),
+                        dateAdded = cursor.getLong(dateAddedCol),
                         uri = Uri.withAppendedPath(collection, id.toString())
                     )
                 }
@@ -261,27 +271,28 @@ private fun AMZMusicTheme(
         "blue" -> Color(0xFF65A9FF)
         "purple" -> Color(0xFFB69CFF)
         "pink" -> Color(0xFFFF8EB8)
-        else -> Color(0xFFB8F36B)
+        "gold" -> Color(0xFFC6A56A)
+        else -> Color(0xFFC6A56A)
     }
     val colors = if (dark) {
         darkColorScheme(
             primary = accent,
-            onPrimary = Color(0xFF17210B),
-            background = Color(0xFF090B0A),
-            surface = Color(0xFF151916),
-            surfaceVariant = Color(0xFF222923),
-            onSurface = Color(0xFFF2F5EF),
-            onSurfaceVariant = Color(0xFFA2ADA2)
+            onPrimary = Color(0xFF211B11),
+            background = Color(0xFF101114),
+            surface = Color(0xFF191B20),
+            surfaceVariant = Color(0xFF24272D),
+            onSurface = Color(0xFFF1EEE8),
+            onSurfaceVariant = Color(0xFFA6A39C)
         )
     } else {
         lightColorScheme(
             primary = accent,
             onPrimary = Color.White,
-            background = Color(0xFFF5F7F3),
-            surface = Color(0xFFFFFFFF),
-            surfaceVariant = Color(0xFFE8EDE7),
-            onSurface = Color(0xFF182019),
-            onSurfaceVariant = Color(0xFF647064)
+            background = Color(0xFFF4F1EA),
+            surface = Color(0xFFFFFDF8),
+            surfaceVariant = Color(0xFFEAE4D8),
+            onSurface = Color(0xFF24221E),
+            onSurfaceVariant = Color(0xFF706B62)
         )
     }
     MaterialTheme(colorScheme = colors, content = content)
@@ -341,14 +352,18 @@ private fun MusicHome(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             Column {
-                if (currentTrack != null) {
-                    MiniPlayer(
+                AnimatedVisibility(
+                    visible = currentTrack != null,
+                    enter = fadeIn() + slideInVertically { it / 3 },
+                    exit = fadeOut() + slideOutVertically { it / 3 }
+                ) {
+                    currentTrack?.let { track -> MiniPlayer(
                         track = currentTrack,
                         isPlaying = isPlaying,
                         onOpen = { showPlayer = true },
                         onPlayPause = { if (isPlaying) controller?.pause() else controller?.play() },
                         onNext = { controller?.seekToNextMediaItem() }
-                    )
+                    ) }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp, vertical = 8.dp)
@@ -386,7 +401,8 @@ private fun MusicHome(
                 modifier = Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                AMZBrandMark(Modifier.size(54.dp))
+                Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text("AMZ MUSIC", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Text(txt(language, "موسیقی، به سبک تو", "Music, your way"), fontSize = 27.sp, fontWeight = FontWeight.Bold)
                 }
@@ -408,7 +424,7 @@ private fun MusicHome(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(txt(language, "کتابخانه موسیقی تو", "Your music library"), color = Color(0xFFB8F36B), fontSize = 13.sp)
+                        Text(txt(language, "کتابخانه موسیقی تو", "Your music library"), color = Color(0xFFC6A56A), fontSize = 13.sp)
                         Text(txt(language, "${tracks.size} آهنگ در گوشی", "${tracks.size} songs on device"), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 5.dp))
                         Text(txt(language, "بدون اینترنت • بدون سرور", "Offline • No server needed"), color = Color(0xFFAAB5A8), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                     }
@@ -431,7 +447,7 @@ private fun MusicHome(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    when (selectedTab) { 1 -> txt(language, "آلبوم‌ها", "Albums"); 2 -> txt(language, "هنرمندان", "Artists"); 3 -> txt(language, "آهنگ‌های پسندیده", "Favorites"); else -> txt(language, "همه آهنگ‌ها", "All songs") },
+                    when (selectedTab) { 1 -> txt(language, "آلبوم‌ها", "Albums"); 2 -> txt(language, "هنرمندان", "Artists"); 3 -> txt(language, "آهنگ‌های پسندیده", "Favorites"); else -> txt(language, "تازه اضافه‌شده‌ها", "Recently added") },
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -468,6 +484,10 @@ private fun MusicHome(
                     verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     items(filtered, key = { it.id }) { track ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically { it / 6 }
+                        ) {
                         val trackIndex = tracks.indexOfFirst { it.id == track.id }
                         TrackRow(
                             track = track,
@@ -483,6 +503,7 @@ private fun MusicHome(
                                 if (track.id in favorites) favorites.remove(track.id) else favorites.add(track.id)
                             }
                         )
+                        }
                     }
                     item { Spacer(Modifier.height(12.dp)) }
                 }
@@ -546,6 +567,29 @@ private fun AudioTrack.toMediaItem(): MediaItem {
     return MediaItem.Builder().setMediaId(id.toString()).setUri(uri).setMediaMetadata(metadata).build()
 }
 
+
+@Composable
+private fun AMZBrandMark(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(17.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF29251F), Color(0xFF111317))))
+            .padding(2.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(Color(0xFF17191D)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("AMZ", color = Color(0xFFC6A56A), fontSize = 16.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(7, 13, 9, 16, 6).forEach { height ->
+                    Box(Modifier.width(3.dp).height(height.dp).clip(CircleShape).background(Color(0xFFC6A56A)))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun EmptyLibrary(title: String, action: String, onAction: () -> Unit) {
     Column(
@@ -567,8 +611,8 @@ private fun TrackRow(
     onFavorite: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
-            .background(if (active) Color(0xFF1C281D) else Color.Transparent)
+        modifier = Modifier.fillMaxWidth().animateContentSize().clip(RoundedCornerShape(15.dp))
+            .background(if (active) Color(0xFF29251F) else Color.Transparent)
             .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -594,7 +638,7 @@ private fun AlbumTile(seed: Long, modifier: Modifier = Modifier) {
     )
     val colors = palettes[(kotlin.math.abs(seed) % palettes.size).toInt()]
     Box(
-        modifier = modifier.clip(RoundedCornerShape(13.dp))
+        modifier = modifier.animateContentSize().clip(RoundedCornerShape(13.dp))
             .background(Brush.linearGradient(colors)),
         contentAlignment = Alignment.Center
     ) {
@@ -611,7 +655,7 @@ private fun MiniPlayer(
     onNext: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)
+        modifier = Modifier.fillMaxWidth().animateContentSize().padding(horizontal = 12.dp, vertical = 7.dp)
             .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onOpen).padding(9.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -755,7 +799,7 @@ private fun SettingsSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(
-                    "lime" to Color(0xFFB8F36B),
+                    "gold" to Color(0xFFC6A56A),
                     "blue" to Color(0xFF65A9FF),
                     "purple" to Color(0xFFB69CFF),
                     "pink" to Color(0xFFFF8EB8)
