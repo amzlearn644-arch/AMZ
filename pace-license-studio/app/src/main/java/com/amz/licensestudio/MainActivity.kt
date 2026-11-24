@@ -50,29 +50,28 @@ class MainActivity : ComponentActivity() {
 
 private fun decodePrivateKey(context: Context, uri: Uri): ByteArray {
     val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        ?: error("فایل کلید خوانده نشد.")
+        ?: error("امکان خواندن فایل کلید وجود ندارد.")
     val text = raw.toString(Charsets.UTF_8).trim()
     val seed = if (text.startsWith("-----BEGIN PRIVATE KEY-----")) {
         val body = text.substringAfter("-----BEGIN PRIVATE KEY-----")
             .substringBefore("-----END PRIVATE KEY-----")
             .filterNot { it.isWhitespace() }
         val der = Base64.decode(body, Base64.DEFAULT)
-        // PKCS#8 Ed25519: the final 32 bytes are the private seed.
-        require(der.size >= 32) { "ساختار فایل کلید معتبر نیست." }
+        require(der.size >= 32) { "ساختار فایل کلید خصوصی معتبر نیست." }
         der.copyOfRange(der.size - 32, der.size)
     } else {
         val decoded = try { Base64.decode(text, Base64.DEFAULT) } catch (_: Throwable) { raw }
         when {
             decoded.size == 32 -> decoded
             decoded.size >= 32 -> decoded.copyOfRange(decoded.size - 32, decoded.size)
-            else -> error("کلید خصوصی باید فایل PEM استاندارد Ed25519 یا seed سی‌ودوبایتی باشد.")
+            else -> error("فایل باید شامل کلید خصوصی Ed25519 با قالب PEM یا یک کلید ۳۲ بایتی باشد.")
         }
     }
     require(seed.size == 32) { "طول کلید خصوصی معتبر نیست." }
     val privateKey = Ed25519PrivateKeyParameters(seed, 0)
     val derivedPublic = Base64.encodeToString(privateKey.generatePublicKey().encoded, Base64.NO_WRAP)
     require(derivedPublic == EXPECTED_PUBLIC_KEY) {
-        "این کلید متعلق به AMZ Pace نیست. فایل کلید خصوصی صحیح را وارد کنید."
+        "این کلید با AMZ Pace مطابقت ندارد. فایل کلید خصوصی صحیح را انتخاب کنید."
     }
     return seed
 }
@@ -117,9 +116,9 @@ private fun StudioScreen() {
                 keyReady = true
                 showKeyWarning = false
                 error = ""
-                Toast.makeText(context, "کلید خصوصی با موفقیت و به‌صورت محلی ذخیره شد.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "کلید خصوصی با موفقیت در حافظه امن داخلی برنامه ذخیره شد.", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                error = e.message ?: "خطا در خواندن کلید"
+                error = e.message ?: "هنگام خواندن کلید خصوصی خطایی رخ داد."
             }
         }
     }
@@ -142,7 +141,7 @@ private fun StudioScreen() {
                 Icon(Icons.Default.Security, null, tint = mint, modifier = Modifier.size(42.dp))
                 Text("AMZ", color = mint, fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 6.sp)
                 Text("License Studio", color = white, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                Text("ابزار خصوصی صدور لایسنس AMZ Pace", color = Color(0xFF9EADBF), fontSize = 13.sp)
+                Text("ابزار اختصاصی صدور لایسنس AMZ Pace", color = Color(0xFF9EADBF), fontSize = 13.sp)
                 Spacer(Modifier.height(24.dp))
 
                 Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(18.dp)) {
@@ -150,28 +149,42 @@ private fun StudioScreen() {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Key, null, tint = mint)
                             Spacer(Modifier.width(8.dp))
-                            Text("کلید امضای خصوصی", fontWeight = FontWeight.Bold, color = white)
+                            Text("کلید خصوصی امضای لایسنس", fontWeight = FontWeight.Bold, color = white)
                             Spacer(Modifier.weight(1f))
-                            Text(if (keyReady) "آماده" else "وارد نشده", color = if (keyReady) mint else Color(0xFFFFC66D), fontSize = 12.sp)
+                            Text(if (keyReady) "آماده صدور" else "بارگذاری نشده",
+                                color = if (keyReady) mint else Color(0xFFFFC66D), fontSize = 12.sp)
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "فایل کلید خصوصی PEM را فقط روی گوشی خودت وارد کن. کلید پس از بررسی با کلید عمومی AMZ Pace در فضای خصوصی این برنامه ذخیره می‌شود.",
-                            color = Color(0xFFAFBDCE), fontSize = 12.sp
+                            "فایل کلید خصوصی را فقط روی دستگاه خودت وارد کن. برنامه پس از بررسی، کلید را فقط در حافظه داخلی خودش نگه می‌دارد. این فایل را برای هیچ‌کس ارسال نکن.",
+                            color = Color(0xFFAFBDCE), fontSize = 12.sp, lineHeight = 19.sp
                         )
                         Spacer(Modifier.height(12.dp))
                         Button(
                             onClick = { picker.launch(arrayOf("application/x-pem-file", "application/octet-stream", "text/plain", "*/*")) },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(if (keyReady) "انتخاب / جایگزینی کلید" else "وارد کردن فایل کلید خصوصی") }
+                        ) { Text(if (keyReady) "انتخاب یا جایگزینی کلید خصوصی" else "انتخاب فایل کلید خصوصی") }
                     }
                 }
 
                 Spacer(Modifier.height(18.dp))
+                Text(
+                    "پس از دریافت شناسه دستگاه مشتری، آن را در کادر زیر وارد کن. شناسه باید ۶۴ کاراکتر باشد.",
+                    color = Color(0xFFAFBDCE), fontSize = 13.sp, lineHeight = 20.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
-                    value = deviceId, onValueChange = { deviceId = it.uppercase(Locale.ROOT).filter { c -> c.isLetterOrDigit() }.take(64); license = ""; error = "" },
-                    modifier = Modifier.fillMaxWidth(), label = { Text("شناسه دستگاه مشتری") },
-                    placeholder = { Text("۶۴ کاراکتر شناسه دستگاه") }, minLines = 2,
+                    value = deviceId,
+                    onValueChange = {
+                        deviceId = it.uppercase(Locale.ROOT).filter { c -> c.isLetterOrDigit() }.take(64)
+                        license = ""
+                        error = ""
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("شناسه دستگاه مشتری") },
+                    placeholder = { Text("شناسه ۶۴ کاراکتری را وارد یا جای‌گذاری کنید") },
+                    minLines = 2,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = white, unfocusedTextColor = white,
                         focusedBorderColor = mint, unfocusedBorderColor = Color(0xFF53657C),
@@ -187,21 +200,25 @@ private fun StudioScreen() {
                             error = ""
                         } catch (e: Exception) {
                             license = ""
-                            error = e.message ?: "امکان تولید لایسنس وجود ندارد."
+                            error = e.message ?: "صدور لایسنس انجام نشد. اطلاعات واردشده را بررسی کن."
                         }
                     },
                     enabled = keyReady && deviceId.length == 64,
                     modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text("تولید لایسنس اختصاصی", fontWeight = FontWeight.Bold) }
+                ) { Text("صدور لایسنس برای این دستگاه", fontWeight = FontWeight.Bold) }
 
                 if (error.isNotBlank()) {
-                    Text(error, color = Color(0xFFFF827C), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp))
+                    Text(error, color = Color(0xFFFF827C), textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
                 }
                 if (license.isNotBlank()) {
                     Spacer(Modifier.height(18.dp))
                     Card(colors = CardDefaults.cardColors(containerColor = panel), shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            Text("لایسنس تولیدشده", color = mint, fontWeight = FontWeight.Bold)
+                            Text("لایسنس صادرشده", color = mint, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(6.dp))
+                            Text("این کد را برای مشتری ارسال کن تا در صفحه فعال‌سازی AMZ Pace وارد کند.",
+                                color = Color(0xFFAFBDCE), fontSize = 12.sp, lineHeight = 18.sp)
                             Spacer(Modifier.height(8.dp))
                             Text(license, color = white, fontSize = 11.sp)
                             Spacer(Modifier.height(12.dp))
@@ -209,23 +226,24 @@ private fun StudioScreen() {
                             OutlinedButton(
                                 onClick = {
                                     clipboard.setPrimaryClip(ClipData.newPlainText("AMZ Pace License", license))
-                                    Toast.makeText(context, "لایسنس کپی شد.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "کد لایسنس کپی شد. اکنون می‌توانی آن را برای مشتری بفرستی.", Toast.LENGTH_SHORT).show()
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(Icons.Default.ContentCopy, null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("کپی لایسنس")
+                                Text("کپی کد لایسنس")
                             }
                         }
                     }
                 }
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    "امنیت: کلید خصوصی هرگز به سرور یا GitHub ارسال نمی‌شود. از گوشی و فایل کلید نسخه پشتیبان امن نگه دار؛ حذف داده‌های برنامه، کلید ذخیره‌شده را پاک می‌کند.",
-                    color = Color(0xFF8999AD), fontSize = 11.sp, textAlign = TextAlign.Center
+                    "نکته امنیتی: کلید خصوصی هرگز به سرور یا GitHub ارسال نمی‌شود. از فایل اصلی کلید خصوصی یک نسخه پشتیبان امن و آفلاین نگه‌دار. با حذف داده‌های این برنامه، نسخه ذخیره‌شده کلید نیز پاک می‌شود.",
+                    color = Color(0xFF8999AD), fontSize = 11.sp, textAlign = TextAlign.Center, lineHeight = 17.sp
                 )
-                Text("Created by Amin", color = Color(0xFF66778E), fontSize = 11.sp, modifier = Modifier.padding(top = 18.dp, bottom = 20.dp))
+                Text("ساخته‌شده توسط Amin", color = Color(0xFF66778E), fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 18.dp, bottom = 20.dp))
             }
         }
     }
