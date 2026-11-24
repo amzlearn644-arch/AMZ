@@ -182,7 +182,7 @@ class AnnounceService:Service(),TextToSpeech.OnInitListener{
    override fun onDone(utteranceId:String?){stopSelf()}
    override fun onError(utteranceId:String?){stopSelf()}
   })
-  engine.language=if(msg.contains("well done")||msg.contains("it is time"))Locale.US else Locale("fa","IR")
+  engine.language=if(getSharedPreferences(PREF,0).getString("speech","fa")=="en")Locale.US else Locale("fa","IR")
   val vol=getSharedPreferences(PREF,0).getFloat("volume",1f)
   val result=engine.speak(msg,TextToSpeech.QUEUE_FLUSH,Bundle().apply{putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,vol)},"pace")
   if(result==TextToSpeech.ERROR)stopSelf() else Handler(mainLooper).postDelayed({stopSelf()},30000)
