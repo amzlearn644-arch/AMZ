@@ -60,7 +60,7 @@ data class Lesson(val id:String=UUID.randomUUID().toString(),val name:String,val
  val planned:Int get()=runCatching{Duration.between(LocalTime.parse(start),LocalTime.parse(end)).toMinutes().toInt()}.getOrDefault(0)
  val actual:Int get()=if(started>0&&finished>started)((finished-started)/60000).toInt() else 0
 }
-data class Plan(val date:String=LocalDate.now().toString(),val target:Int=240,val lessons:List<Lesson>,val closed:Boolean=false){
+data class Plan(val id:String=UUID.randomUUID().toString(),val date:String=LocalDate.now().toString(),val target:Int=240,val lessons:List<Lesson>,val closed:Boolean=false){
  val minutes:Int get()=lessons.sumOf{it.actual}; val tests:Int get()=lessons.sumOf{it.tests}
 }
 data class StudyBreak(val start:String,val end:String,val minutes:Int)
@@ -77,9 +77,9 @@ internal fun isValidPlan(target:Int,lessons:List<Lesson>):Boolean{
 private fun load(c:Context):List<Plan> = runCatching{
  val a=JSONArray(c.getSharedPreferences(PREF,0).getString("plans","[]"))
  (0 until a.length()).map{ i-> val o=a.getJSONObject(i);val l=o.getJSONArray("lessons")
- Plan(o.getString("date"),o.optInt("target",240),(0 until l.length()).map{j->val x=l.getJSONObject(j);Lesson(x.getString("id"),x.getString("name"),x.getString("topic"),x.getString("start"),x.getString("end"),x.optLong("started"),x.optLong("finished"),x.optInt("tests"))},o.optBoolean("closed"))}
+ Plan(o.optString("id",UUID.randomUUID().toString()),o.getString("date"),o.optInt("target",240),(0 until l.length()).map{j->val x=l.getJSONObject(j);Lesson(x.getString("id"),x.getString("name"),x.getString("topic"),x.getString("start"),x.getString("end"),x.optLong("started"),x.optLong("finished"),x.optInt("tests"))},o.optBoolean("closed"))}
 }.getOrDefault(emptyList())
-private fun save(c:Context,ps:List<Plan>){val a=JSONArray();ps.forEach{p->val o=JSONObject().put("date",p.date).put("target",p.target).put("closed",p.closed);val l=JSONArray();p.lessons.forEach{x->l.put(JSONObject().put("id",x.id).put("name",x.name).put("topic",x.topic).put("start",x.start).put("end",x.end).put("started",x.started).put("finished",x.finished).put("tests",x.tests))};o.put("lessons",l);a.put(o)};c.getSharedPreferences(PREF,0).edit().putString("plans",a.toString()).apply()}
+private fun save(c:Context,ps:List<Plan>){val a=JSONArray();ps.forEach{p->val o=JSONObject().put("id",p.id).put("date",p.date).put("target",p.target).put("closed",p.closed);val l=JSONArray();p.lessons.forEach{x->l.put(JSONObject().put("id",x.id).put("name",x.name).put("topic",x.topic).put("start",x.start).put("end",x.end).put("started",x.started).put("finished",x.finished).put("tests",x.tests))};o.put("lessons",l);a.put(o)};c.getSharedPreferences(PREF,0).edit().putString("plans",a.toString()).apply()}
 private fun fa(s:String)=s.map{if(it in '0'..'9')"۰۱۲۳۴۵۶۷۸۹"[it-'0'] else it}.joinToString("")
 private fun jalali(d:LocalDate):String{
  var gy=d.year-1600;val gm=d.monthValue-1;val gd=d.dayOfMonth-1
@@ -262,7 +262,7 @@ private fun hasAccess(c:Context):Boolean{
 @Composable private fun Today(plans:List<Plan>,user:String,card:Color,fg:Color,onSave:(Plan)->Unit,onUpdate:(Plan)->Unit){
  val context=LocalContext.current
  var create by remember{mutableStateOf(false)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
- val p=plans.firstOrNull{it.date==LocalDate.now().toString()};val done=p?.lessons?.count{it.finished>0}?:0
+ var selectedPlanId by remember { mutableStateOf(plans.firstOrNull{it.date==LocalDate.now().toString()}?.id ?: "") };val todaysPlans=plans.filter{it.date==LocalDate.now().toString()};if(todaysPlans.none{it.id==selectedPlanId})selectedPlanId=todaysPlans.firstOrNull()?.id ?: "";val p=todaysPlans.firstOrNull{it.id==selectedPlanId};val done=p?.lessons?.count{it.finished>0}?:0
  LaunchedEffect(p?.lessons){val activity=context as? ComponentActivity;val intent=activity?.intent;if(intent?.getStringExtra("kind")=="end"){val id=intent.getStringExtra("lessonId");val lesson=p?.lessons?.firstOrNull{it.id==id&&it.finished==0L};if(lesson!=null){finish=lesson;yes=false;count="0"};intent.removeExtra("kind");intent.removeExtra("lessonId");intent.removeExtra("date")}}
  LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),contentPadding=PaddingValues(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
  item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(18.dp)){Text("سلام ${user}، آماده‌ای؟",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("با تمرکز پیش برو؛ استراحت را هم فراموش نکن.",color=muted);Spacer(Modifier.height(10.dp));Text("پیشرفت امروز: ${done}/${p?.lessons?.size?:0} درس",color=teal,fontWeight=FontWeight.Bold)}}}
@@ -364,7 +364,7 @@ private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit
                 val sorted = lessons.sortedBy { it.start }
                 val targetValue = target.toIntOrNull()
                 if (targetValue != null && isValidPlan(targetValue, sorted)) {
-                    savePlan(Plan(date = old?.date ?: LocalDate.now().toString(), target = targetValue, lessons = sorted))
+                    savePlan(Plan(id = old?.id ?: UUID.randomUUID().toString(), date = old?.date ?: LocalDate.now().toString(), target = targetValue, lessons = sorted))
                     close()
                 } else {
                     error = "نام و موضوع درس، ساعت‌ها، هدف و نبود تداخل را بررسی کن."
