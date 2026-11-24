@@ -136,7 +136,7 @@ private fun save(c:Context,w:Workspace) {
 class MainActivity:ComponentActivity(){
     override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);ensureChannel(this);setContent{PaceApp()}}
 }
-@Composable fun PaceApp(){
+@Composable fun PaceAppContent(){
     val c= LocalContext.current
     var data by remember{mutableStateOf(load(c))}
     var page by remember{mutableIntStateOf(0)}
