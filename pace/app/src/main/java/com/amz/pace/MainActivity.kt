@@ -501,7 +501,10 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
    OutlinedTextField(value=displayName,onValueChange={displayName=it;nameSaved=false},singleLine=true,label={Text("نامی که دستیار صدایت می‌کند")})
    TextButton(onClick={if(displayName.isNotBlank()){pref.edit().putString("user",displayName.trim()).apply();nameSaved=true}}){Text(if(nameSaved)"ذخیره شد" else "ذخیره نام")}
    Divider()
-   Text("زبان رابط کاربری",color=fg)\n   Row{FilterChip(uiLanguage=="fa",{setUiLanguage("fa")},label={Text("فارسی")});FilterChip(uiLanguage=="en",{setUiLanguage("en")},label={Text("English")})}\n   Divider()\n   Text("پوسته",color=fg)
+   Text("زبان رابط کاربری",color=fg)
+   Row{FilterChip(uiLanguage=="fa",{setUiLanguage("fa")},label={Text("فارسی")});FilterChip(uiLanguage=="en",{setUiLanguage("en")},label={Text("English")})}
+   Divider()
+   Text("پوسته",color=fg)
    Row{listOf("dark" to "تیره","light" to "روشن").forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}}
    Divider()
    Text("زبان گفتار",color=fg)
