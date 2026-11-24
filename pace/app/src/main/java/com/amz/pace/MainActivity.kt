@@ -106,7 +106,7 @@ private fun hasAccess(c:Context):Boolean{
  val f=Build.VERSION.SDK_INT<34||c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
  return n&&a&&f
 }
-@Composable fun PaceApp(){
+@Composable private fun PaceAppContent(){
  val c=LocalContext.current;val pref=c.getSharedPreferences(PREF,0)
  var plans by remember{mutableStateOf(load(c))};var user by remember{mutableStateOf(pref.getString("user","")?:"")}
  var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")}
