@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +43,7 @@ import java.util.Locale
 
 private const val EXPECTED_PUBLIC_KEY = "TQ+TzQvCuE1uGaNOflTm9JW6htGVclVCC7gpRUnXsMc="
 private const val KEY_FILE = "amz_pace_signing_key.pk8"
+private const val ACCESS_PIN = "4172"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,9 +101,41 @@ private fun makeLicense(seed: ByteArray, deviceId: String): String {
     return "AMZP1.$p.$s"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StudioScreen() {
+    var pin by remember { mutableStateOf("") }
+    var unlocked by remember { mutableStateOf(false) }
+    var pinError by remember { mutableStateOf("") }
+    val bg = Color(0xFF0B1220)
+    val mint = Color(0xFF55D6BE)
+    val white = Color(0xFFF2F5F8)
+    MaterialTheme(colorScheme = darkColorScheme(primary = mint, onPrimary = bg, background = bg, surface = Color(0xFF172338), onSurface = white)) {
+        Surface(Modifier.fillMaxSize(), color = bg) {
+            if (unlocked) {
+                StudioScreenUnlocked()
+            } else {
+                Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(Icons.Default.Security, null, tint = mint, modifier = Modifier.size(46.dp))
+                    Spacer(Modifier.height(16.dp))
+                    Text("AMZ License Studio", color = white, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(22.dp))
+                    OutlinedTextField(value = pin, onValueChange = { pin = it.filter(Char::isDigit).take(4); pinError = "" },
+                        modifier = Modifier.fillMaxWidth(), label = { Text("رمز ورود") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+                    if (pinError.isNotBlank()) Text(pinError, color = Color(0xFFFF827C), modifier = Modifier.padding(top = 8.dp))
+                    Spacer(Modifier.height(14.dp))
+                    Button(onClick = { if (pin == ACCESS_PIN) unlocked = true else { pinError = "رمز ورود اشتباه است."; pin = "" } },
+                        enabled = pin.length == 4, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("ورود") }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StudioScreenUnlocked() {
     val context = LocalContext.current
     val keyFile = remember { File(context.filesDir, KEY_FILE) }
     var keyReady by remember { mutableStateOf(keyFile.exists() && keyFile.length() > 0) }
@@ -107,6 +143,7 @@ private fun StudioScreen() {
     var license by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var showKeyWarning by remember { mutableStateOf(!keyReady) }
+    var keyVisible by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -164,6 +201,26 @@ private fun StudioScreen() {
                             onClick = { picker.launch(arrayOf("application/x-pem-file", "application/octet-stream", "text/plain", "*/*")) },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text(if (keyReady) "انتخاب یا جایگزینی کلید خصوصی" else "انتخاب فایل کلید خصوصی") }
+                        if (keyReady) {
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedButton(onClick = { keyVisible = !keyVisible }, modifier = Modifier.fillMaxWidth()) {
+                                Text(if (keyVisible) "مخفی‌کردن کلید خصوصی" else "نمایش کلید خصوصی")
+                            }
+                            if (keyVisible) {
+                                val privateKeyText = Base64.encodeToString(keyFile.readBytes(), Base64.NO_WRAP)
+                                Spacer(Modifier.height(8.dp))
+                                Text(privateKeyText, color = white, fontSize = 11.sp)
+                                OutlinedButton(onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("AMZ Pace Private Key", privateKeyText))
+                                    Toast.makeText(context, "کلید خصوصی کپی شد؛ آن را محرمانه نگه‌دار.", Toast.LENGTH_LONG).show()
+                                }, modifier = Modifier.fillMaxWidth()) {
+                                    Icon(Icons.Default.ContentCopy, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("کپی کلید خصوصی")
+                                }
+                            }
+                        }
                     }
                 }
 
