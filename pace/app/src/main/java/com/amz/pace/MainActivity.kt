@@ -128,7 +128,7 @@ class AnnounceService:Service(),TextToSpeech.OnInitListener{
   val clock=i?.getStringExtra("clock")?:"";val lang=getSharedPreferences(PREF,0).getString("speech","fa")
   msg=if(kind=="end")"${name} خسته نباشی. ${clock}. زمان مطالعه ${title} تمام شد." else "${name}، ${clock}. برو درس ${title} را شروع کن."
   if(lang=="en")msg=if(kind=="end")"${name}, well done. Study time for ${title} is over." else "${name}, it is time to start ${title}."
-  val open=PendingIntent.getActivity(this,3,Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  val open=PendingIntent.getActivity(this,3,Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("kind",kind).putExtra("lessonId",i?.getStringExtra("lessonId")).putExtra("date",i?.getStringExtra("date")),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   val n=NotificationCompat.Builder(this,CH).setSmallIcon(R.drawable.ic_amz_pace).setContentTitle(if(kind=="end")"پایان درس" else "زمان شروع درس").setContentText(msg).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setContentIntent(open).setFullScreenIntent(open,true).build()
   startForeground(3,n);t=TextToSpeech(this,this);return START_NOT_STICKY
  }
@@ -165,7 +165,7 @@ private fun scheduleEnd(c:Context,l:Lesson,date:String){
  var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
  if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) return
  val intent=Intent(c,StudyAlarmReceiver::class.java)
-  .putExtra("kind","end").putExtra("lesson",l.name).putExtra("clock",speakTime(l.end))
+  .putExtra("kind","end").putExtra("lesson",l.name).putExtra("lessonId",l.id).putExtra("date",date).putExtra("clock",speakTime(l.end))
  val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+1,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
  if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
  else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
@@ -226,6 +226,7 @@ private fun hasAccess(c:Context):Boolean{
  val context=LocalContext.current
  var create by remember{mutableStateOf(false)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
  val p=plans.firstOrNull{it.date==LocalDate.now().toString()};val done=p?.lessons?.count{it.finished>0}?:0
+ LaunchedEffect(p?.lessons){val activity=context as? ComponentActivity;val intent=activity?.intent;if(intent?.getStringExtra("kind")=="end"){val id=intent.getStringExtra("lessonId");val lesson=p?.lessons?.firstOrNull{it.id==id&&it.finished==0};if(lesson!=null){finish=lesson;yes=false;count="0"};intent.removeExtra("kind");intent.removeExtra("lessonId");intent.removeExtra("date")}}
  LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),contentPadding=PaddingValues(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
  item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(18.dp)){Text("سلام ${user}، آماده‌ای؟",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("با تمرکز پیش برو؛ استراحت را هم فراموش نکن.",color=muted);Spacer(Modifier.height(10.dp));Text("پیشرفت امروز: ${done}/${p?.lessons?.size?:0} درس",color=teal,fontWeight=FontWeight.Bold)}}}
  item{Row(verticalAlignment=Alignment.CenterVertically){Text("برنامه امروز",color=fg,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Button(onClick={create=true}){Icon(Icons.Default.Add,null);Text("برنامه جدید")}}}
