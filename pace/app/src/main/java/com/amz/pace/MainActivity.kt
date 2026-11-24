@@ -1,28 +1,19 @@
-
 package com.amz.pace
 
 import android.Manifest
-import android.app.*
-import android.content.*
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.*
-import android.provider.Settings as AndroidSettings
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
+import android.os.Build
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -40,479 +31,312 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.*
-import java.util.Locale
 import java.util.UUID
+import kotlin.math.roundToInt
 
-private val ink=Color(0xFF101C32); private val teal=Color(0xFF2DD4BF)
-private val paper=Color(0xFFF4F1E8); private val muted=Color(0xFF9AA9BA)
-private const val PREF="pace"; private const val CH="pace-alert"
-data class Lesson(val id:String=UUID.randomUUID().toString(),val name:String,val topic:String,val start:String,val end:String,val started:Long=0,val finished:Long=0,val tests:Int=0){
- val planned:Int get()=runCatching{Duration.between(LocalTime.parse(start),LocalTime.parse(end)).toMinutes().toInt()}.getOrDefault(0)
- val actual:Int get()=if(started>0&&finished>started)((finished-started)/60000).toInt() else 0
+private const val PREF="pace"
+private const val STORE="pace_workspace_v2"
+private const val CHANNEL="amz_pace_alerts"
+private val BG=Color(0xFF0D1728)
+private val SURFACE=Color(0xFF18263B)
+private val SURFACE2=Color(0xFF21334C)
+private val ACCENT=Color(0xFF43D6B0)
+private val BLUE=Color(0xFF79A9FF)
+private val GOLD=Color(0xFFF2C66D)
+private val DANGER=Color(0xFFFF858A)
+private val FG=Color(0xFFF3F6FA)
+private val MUTED=Color(0xFFA9B7CA)
+
+data class Lesson(val id:String=UUID.randomUUID().toString(),val name:String,val topic:String,val start:String,val end:String,val started:Long=0,val finished:Long=0,val tests:Int=0) {
+    val planned:Int get()=runCatching{Duration.between(LocalTime.parse(start),LocalTime.parse(end)).toMinutes().toInt()}.getOrDefault(0)
+    val actual:Int get()=if(started>0&&finished>started)((finished-started)/60000).toInt() else 0
 }
-data class Plan(val id:String=UUID.randomUUID().toString(),val date:String=LocalDate.now().toString(),val target:Int=240,val lessons:List<Lesson>,val closed:Boolean=false){
- val minutes:Int get()=lessons.sumOf{it.actual}; val tests:Int get()=lessons.sumOf{it.tests}
+data class Plan(val id:String=UUID.randomUUID().toString(),val date:String=LocalDate.now().toString(),val target:Int=240,val lessons:List<Lesson>,val closed:Boolean=false) {
+    val minutes:Int get()=lessons.sumOf{it.actual}
+    val tests:Int get()=lessons.sumOf{it.tests}
 }
 data class StudyBreak(val start:String,val end:String,val minutes:Int)
-internal fun studyBreaks(lessons:List<Lesson>):List<StudyBreak>{
- val sorted=lessons.sortedBy{runCatching{LocalTime.parse(it.start)}.getOrDefault(LocalTime.MIN)}
- return sorted.zipWithNext().mapNotNull{(a,b)->runCatching{val from=LocalTime.parse(a.end);val to=LocalTime.parse(b.start);val gap=Duration.between(from,to).toMinutes().toInt();if(gap>0)StudyBreak(a.end,b.start,gap)else null}.getOrNull()}
+internal fun studyBreaks(lessons:List<Lesson>):List<StudyBreak> {
+    val sorted=lessons.sortedBy{runCatching{LocalTime.parse(it.start)}.getOrDefault(LocalTime.MIN)}
+    return sorted.zipWithNext().mapNotNull{(a,b)->runCatching{val n=Duration.between(LocalTime.parse(a.end),LocalTime.parse(b.start)).toMinutes().toInt();if(n>0)StudyBreak(a.end,b.start,n)else null}.getOrNull()}
 }
-internal fun isValidPlan(target:Int,lessons:List<Lesson>):Boolean{
- if(target<=0||lessons.isEmpty())return false
- val sorted=lessons.sortedBy{it.start}
- val valid=sorted.all{l->runCatching{l.name.isNotBlank()&&l.topic.isNotBlank()&&LocalTime.parse(l.end).isAfter(LocalTime.parse(l.start))}.getOrDefault(false)}
- return valid&&sorted.zipWithNext().all{(a,b)->runCatching{!LocalTime.parse(a.end).isAfter(LocalTime.parse(b.start))}.getOrDefault(false)}
-}
-private fun load(c:Context):List<Plan> = runCatching{
- val a=JSONArray(c.getSharedPreferences(PREF,0).getString("plans","[]"))
- (0 until a.length()).map{ i-> val o=a.getJSONObject(i);val l=o.getJSONArray("lessons")
- Plan(o.optString("id",UUID.randomUUID().toString()),o.getString("date"),o.optInt("target",240),(0 until l.length()).map{j->val x=l.getJSONObject(j);Lesson(x.getString("id"),x.getString("name"),x.getString("topic"),x.getString("start"),x.getString("end"),x.optLong("started"),x.optLong("finished"),x.optInt("tests"))},o.optBoolean("closed"))}
-}.getOrDefault(emptyList())
-private fun save(c:Context,ps:List<Plan>){val a=JSONArray();ps.forEach{p->val o=JSONObject().put("id",p.id).put("date",p.date).put("target",p.target).put("closed",p.closed);val l=JSONArray();p.lessons.forEach{x->l.put(JSONObject().put("id",x.id).put("name",x.name).put("topic",x.topic).put("start",x.start).put("end",x.end).put("started",x.started).put("finished",x.finished).put("tests",x.tests))};o.put("lessons",l);a.put(o)};c.getSharedPreferences(PREF,0).edit().putString("plans",a.toString()).apply()}
-private fun fa(s:String)=s.map{if(it in '0'..'9')"۰۱۲۳۴۵۶۷۸۹"[it-'0'] else it}.joinToString("")
-private fun jalali(d:LocalDate):String{
- var gy=d.year-1600;val gm=d.monthValue-1;val gd=d.dayOfMonth-1
- val gdM=intArrayOf(0,31,if(d.isLeapYear)29 else 28,31,30,31,30,31,31,30,31,30,31)
- var g=365*gy+(gy+3)/4-(gy+99)/100+(gy+399)/400+gd
- for(i in 0 until gm)g+=gdM[i+1]
- var j=g-79;val cycle=j/12053;j%=12053
- var jy=979+33*cycle+4*(j/1461);j%=1461
- if(j>=366){jy+=(j-1)/365;j=(j-1)%365}
- val jm=if(j<186)1+j/31 else 7+(j-186)/30
- val jd=if(j<186)1+j%31 else 1+(j-186)%30
- val m=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
- return "${fa(jd.toString())} ${m[jm-1]} ${fa(jy.toString())}"
+internal fun isValidPlan(target:Int,lessons:List<Lesson>):Boolean {
+    if(target<=0||lessons.isEmpty())return false
+    val s=lessons.sortedBy{it.start}
+    val valid=s.all{runCatching{it.name.isNotBlank()&&it.topic.isNotBlank()&&LocalTime.parse(it.end).isAfter(LocalTime.parse(it.start))}.getOrDefault(false)}
+    return valid&&s.zipWithNext().all{(a,b)->runCatching{!LocalTime.parse(a.end).isAfter(LocalTime.parse(b.start))}.getOrDefault(false)}
 }
 internal data class JalaliParts(val year:Int,val month:Int,val day:Int)
 internal fun jalaliParts(date:LocalDate):JalaliParts {
-    var gy = date.year - 1600
-    val gm = date.monthValue - 1
-    val gd = date.dayOfMonth - 1
-    val monthDays = intArrayOf(0,31,if(date.isLeapYear)29 else 28,31,30,31,30,31,31,30,31,30,31)
-    var days = 365*gy + (gy+3)/4 - (gy+99)/100 + (gy+399)/400 + gd
-    for (i in 0 until gm) days += monthDays[i+1]
-    var j = days - 79
-    val cycle = j / 12053
-    j %= 12053
-    var jy = 979 + 33*cycle + 4*(j/1461)
-    j %= 1461
-    if (j >= 366) { jy += (j-1)/365; j = (j-1)%365 }
-    val jm = if (j < 186) 1 + j/31 else 7 + (j-186)/30
-    val jd = if (j < 186) 1 + j%31 else 1 + (j-186)%30
+    val gy=date.year-1600;val gm=date.monthValue-1;val gd=date.dayOfMonth-1
+    val md=intArrayOf(0,31,if(date.isLeapYear)29 else 28,31,30,31,30,31,31,30,31,30,31)
+    var days=365*gy+(gy+3)/4-(gy+99)/100+(gy+399)/400+gd
+    for(i in 0 until gm)days+=md[i+1]
+    var j=days-79;val cycle=j/12053;j%=12053
+    var jy=979+33*cycle+4*(j/1461);j%=1461
+    if(j>=366){jy+=(j-1)/365;j=(j-1)%365}
+    val jm=if(j<186)1+j/31 else 7+(j-186)/30
+    val jd=if(j<186)1+j%31 else 1+(j-186)%30
     return JalaliParts(jy,jm,jd)
 }
 internal fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate {
-    var jy = year - 979
-    var days = 365*jy + (jy/33)*8 + ((jy%33+3)/4)
-    days += if (month <= 6) (month-1)*31 else 186 + (month-7)*30
-    days += day - 1
-    days += 79
-    var gy = 1600 + 400*(days/146097)
-    days %= 146097
-    var leap = true
-    if (days >= 36525) {
-        days--
-        gy += 100*(days/36524)
-        days %= 36524
-        if (days >= 365) days++ else leap = false
-    }
-    gy += 4*(days/1461)
-    days %= 1461
-    if (days >= 366) {
-        leap = false
-        days--
-        gy += days/365
-        days %= 365
-    }
-    val monthDays = intArrayOf(31, if(leap)29 else 28,31,30,31,30,31,31,30,31,30,31)
-    var gm = 0
-    while (gm < 12 && days >= monthDays[gm]) { days -= monthDays[gm]; gm++ }
-    return LocalDate.of(gy,gm+1,days+1)
+    val jy=year-979;var days=365*jy+(jy/33)*8+((jy%33+3)/4)
+    days+=if(month<=6)(month-1)*31 else 186+(month-7)*30
+    days+=day-1+79
+    var gy=1600+400*(days/146097);days%=146097;var leap=true
+    if(days>=36525){days--;gy+=100*(days/36524);days%=36524;if(days>=365)days++ else leap=false}
+    gy+=4*(days/1461);days%=1461
+    if(days>=366){leap=false;days--;gy+=days/365;days%=365}
+    val md=intArrayOf(31,if(leap)29 else 28,31,30,31,30,31,31,30,31,30,31);var m=0
+    while(m<12&&days>=md[m]){days-=md[m];m++}
+    return LocalDate.of(gy,m+1,days+1)
 }
-internal fun jalaliMonthLength(year:Int,month:Int):Int =
-    if (month <= 6) 31 else if (month <= 11) 30 else {
-        val last = jalaliToGregorian(year,12,30)
-        if (jalaliParts(last).month == 12 && jalaliParts(last).day == 30) 30 else 29
-    }
-private val jalaliMonths=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
-private val faUnits=listOf("صفر","یک","دو","سه","چهار","پنج","شش","هفت","هشت","نه","ده","یازده","دوازده","سیزده","چهارده","پانزده","شانزده","هفده","هجده","نوزده")
-private val faTens=listOf("","","بیست","سی","چهل","پنجاه")
-private fun persianNumber(n:Int):String{
- if(n<20)return faUnits[n.coerceAtLeast(0)]
- val ten=n/10;val unit=n%10
- return if(unit==0)faTens[ten] else faTens[ten]+" و "+faUnits[unit]
-}
-internal fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${persianNumber(t.hour)} و ${persianNumber(t.minute)} دقیقه"}.getOrDefault(s)
-class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}};override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);recreate()}}
-private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
-class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
-class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0L)scheduleEnd(c,l,p.date,p.id)else scheduleStart(c,l,p.date)}};runCatching{scheduleBreaks(c,p)}}}}
-class AnnounceService:Service(),TextToSpeech.OnInitListener{
- private var t:TextToSpeech?=null;private var msg=""
- override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
-  val title=i?.getStringExtra("lesson")?:"درس";val kind=i?.getStringExtra("kind")?:"start";val name=getSharedPreferences(PREF,0).getString("user","دوست من")?:"دوست من"
-  val clock=i?.getStringExtra("clock")?:"";val lang=getSharedPreferences(PREF,0).getString("speech","fa")
-  msg=when(kind){
-   "end"->"${name} خسته نباشی. ${clock}. زمان مطالعه ${title} تمام شد."
-   "break_start"->"${name}، ${clock}. زمان استراحت شروع شد."
-   "break_end"->"${name}، ${clock}. زمان استراحت تمام شد؛ برای درس بعدی آماده شو."
-   else->"${name}، ${clock}. برو درس ${title} را شروع کن."
-  }
-  if(lang=="en")msg=when(kind){"end"->"${name}, well done. Study time for ${title} is over.";"break_start"->"${name}, your break starts now.";"break_end"->"${name}, your break is over. Get ready for the next lesson.";else->"${name}, it is time to start ${title}."}
-  val open=PendingIntent.getActivity(this,3,Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("kind",kind).putExtra("lessonId",i?.getStringExtra("lessonId")).putExtra("date",i?.getStringExtra("date")),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  val n=NotificationCompat.Builder(this,CH).setSmallIcon(R.drawable.ic_amz_pace).setContentTitle(if(kind=="end")"پایان درس" else "زمان شروع درس").setContentText(msg).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setContentIntent(open).setFullScreenIntent(open,true).build()
-  startForeground(3,n);t=TextToSpeech(this,this);return START_NOT_STICKY
- }
- override fun onInit(status:Int){
-  if(status!=TextToSpeech.SUCCESS){stopSelf();return}
-  val engine=t?:run{stopSelf();return}
-  engine.setOnUtteranceProgressListener(object:UtteranceProgressListener(){
-   override fun onStart(utteranceId:String?){}
-   override fun onDone(utteranceId:String?){stopSelf()}
-   override fun onError(utteranceId:String?){stopSelf()}
-  })
-  engine.language=if(getSharedPreferences(PREF,0).getString("speech","fa")=="en")Locale.US else Locale("fa","IR")
-  val vol=getSharedPreferences(PREF,0).getFloat("volume",1f)
-  val result=engine.speak(msg,TextToSpeech.QUEUE_FLUSH,Bundle().apply{putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,vol)},"pace")
-  if(result==TextToSpeech.ERROR)stopSelf() else Handler(mainLooper).postDelayed({stopSelf()},30000)
- }
- override fun onBind(i:Intent?)=null
- override fun onDestroy(){t?.stop();t?.shutdown();super.onDestroy()}
-}
-private fun scheduleStart(c:Context,l:Lesson,date:String){
- val am=c.getSystemService(AlarmManager::class.java)
- val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind","start").putExtra("lesson",l.name).putExtra("clock",speakTime(l.start))
- val pi=PendingIntent.getBroadcast(c,l.id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
- val at=LocalDate.parse(date).atTime(LocalTime.parse(l.start)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
- if(at<=System.currentTimeMillis() || l.started>0 || l.finished>0){am.cancel(pi);pi.cancel();return}
- if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
-}
-private fun scheduleEnd(c:Context,l:Lesson,date:String,planId:String){
- val am=c.getSystemService(AlarmManager::class.java)
- val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind","end").putExtra("lesson",l.name).putExtra("lessonId",l.id).putExtra("date",date).putExtra("planId",planId).putExtra("clock",speakTime(l.end))
- val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+1,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
- val at=LocalDate.parse(date).atTime(LocalTime.parse(l.end)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
- if(at<=System.currentTimeMillis()){am.cancel(pi);pi.cancel();return}
- if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
-}
-private fun scheduleBreakAlarm(c:Context,plan:Plan,kind:String,clock:String,requestCode:Int){
- val am=c.getSystemService(AlarmManager::class.java)
- val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind",kind).putExtra("lesson","استراحت").putExtra("clock",speakTime(clock)).putExtra("date",plan.date).putExtra("planId",plan.id)
- val pi=PendingIntent.getBroadcast(c,requestCode,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
- val at=LocalDate.parse(plan.date).atTime(LocalTime.parse(clock)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
- if(at<=System.currentTimeMillis()){am.cancel(pi);pi.cancel();return}
- if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
-}
-private fun scheduleBreaks(c:Context,plan:Plan){
- studyBreaks(plan.lessons).forEachIndexed{index,gap->
-  val base=plan.id.hashCode()+10000+index*2
-  scheduleBreakAlarm(c,plan,"break_start",gap.start,base)
-  scheduleBreakAlarm(c,plan,"break_end",gap.end,base+1)
- }
-}
-private fun cancelBreakAlarms(c:Context,plan:Plan){
- val am=c.getSystemService(AlarmManager::class.java)
- repeat(100){offset->
-  val pi=PendingIntent.getBroadcast(c,plan.id.hashCode()+10000+offset,Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
-  if(pi!=null){am.cancel(pi);pi.cancel()}
- }
-}
-private fun cancelLessonAlarms(c:Context,l:Lesson){
- val am=c.getSystemService(AlarmManager::class.java)
- listOf(l.id.hashCode(),l.id.hashCode()+1).forEach{request->
-  val pi=PendingIntent.getBroadcast(c,request,Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
-  if(pi!=null){am.cancel(pi);pi.cancel()}
- }
-}
-private fun hasAccess(c:Context):Boolean{
- val n=Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED
- val a=Build.VERSION.SDK_INT<31||c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
- val f=Build.VERSION.SDK_INT<34||c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
- return n&&a&&f
-}
-@Composable fun PaceAppContent(){
- val c=LocalContext.current;val pref=c.getSharedPreferences(PREF,0)
- var plans by remember{mutableStateOf(load(c))};var user by remember{mutableStateOf(pref.getString("user","")?:"")}
- var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")};var uiLanguage by remember{mutableStateOf(pref.getString("ui_language","fa")?:"fa")}
- var tick by remember{mutableIntStateOf(0)};LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(1000);tick++;plans=load(c)}}
- var permissionRefresh by remember{mutableIntStateOf(0)}
- DisposableEffect(c){val owner=c as? LifecycleOwner;val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_RESUME)permissionRefresh++};owner?.lifecycle?.addObserver(observer);onDispose{owner?.lifecycle?.removeObserver(observer)}}
- val notificationGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<33 || ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)
- val exactAlarmGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<31 || c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms())
- val fullScreenGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<34 || c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent())
- val allPermissionsGranted = notificationGranted && exactAlarmGranted && fullScreenGranted
- var name by remember{mutableStateOf(user)};var setup by remember{mutableStateOf(user.isBlank())}
- val ask=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
- val bg=if(theme=="light")Color(0xFFF1F4F7) else ink;val fg=if(theme=="light")ink else paper;val card=if(theme=="light")Color.White else Color(0xFF1B2B43)
- MaterialTheme(colorScheme=darkColorScheme(primary=teal,background=bg,surface=card,onSurface=fg)){
- Surface(Modifier.fillMaxSize(),color=bg){
- when{
- !allPermissionsGranted->Column(Modifier.fillMaxSize().padding(horizontal=22.dp, vertical=18.dp),verticalArrangement=Arrangement.Center){
-  Logo(76); Spacer(Modifier.height(18.dp)); Text("آماده‌سازی AMZ Pace",color=fg,fontSize=23.sp,fontWeight=FontWeight.Bold)
-  Text("برای اینکه یادآوری درس‌ها درست و به‌موقع کار کند، دسترسی‌های زیر را فعال کن.",color=muted); Spacer(Modifier.height(16.dp))
-  AccessRow("اعلان‌ها","برای نمایش یادآوری درس‌ها",notificationGranted){if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS)}
-  AccessRow("آلارم دقیق","برای اجرای یادآوری در ساعت تعیین‌شده",exactAlarmGranted){if(Build.VERSION.SDK_INT>=31)c.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+c.packageName)))}
-  AccessRow("نمایش تمام‌صفحه","برای نمایش هشدار مهم هنگام شروع درس",fullScreenGranted){if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:"+c.packageName)))}
-  Spacer(Modifier.height(12.dp)); Text("پس از بازگشت از تنظیمات، وضعیت هر دسترسی خودکار بررسی می‌شود.",color=muted,fontSize=12.sp)
- }
- setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
- else->Column{
- Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
- AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{lesson->cancelLessonAlarms(c,lesson);if(lesson.started>0&&lesson.finished==0L)scheduleEnd(c,lesson,plan.date,plan.id)else scheduleStart(c,lesson,plan.date)};cancelBreakAlarms(c,plan);scheduleBreaks(c,plan)},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)};scheduleBreaks(c,plan)},{plan->plan.lessons.forEach{cancelLessonAlarms(c,it)};cancelBreakAlarms(c,plan);plans=plans.filterNot{it.id==plan.id};save(c,plans)})
- 1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme,{theme=it;pref.edit().putString("theme",it).apply()},uiLanguage,{uiLanguage=it;pref.edit().putString("ui_language",it).apply()},{user=it;name=it})}}
- NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
- }
- }
- }
- }
-}
-@Composable private fun Logo(size:Int){Box(Modifier.size(size.dp).clip(RoundedCornerShape((size/3).dp)).background(ink),contentAlignment=Alignment.Center){Canvas(Modifier.fillMaxSize(.68f)){drawCircle(teal,style=Stroke(size.dp.toPx()*.09f));drawLine(paper,center,androidx.compose.ui.geometry.Offset(center.x,center.y*.52f),size.dp.toPx()*.08f,cap=StrokeCap.Round);drawLine(paper,center,androidx.compose.ui.geometry.Offset(center.x+size.dp.toPx()*.2f,center.y+size.dp.toPx()*.12f),size.dp.toPx()*.08f,cap=StrokeCap.Round)}}}
-@Composable private fun AccessRow(title:String,description:String,granted:Boolean,act:()->Unit){
- Card(Modifier.fillMaxWidth().padding(vertical=5.dp).animateContentSize(),colors=CardDefaults.cardColors(containerColor=if(granted)Color(0xFF123B3A) else Color(0xFF1B2B43)),shape=RoundedCornerShape(16.dp)){
-  Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically){
-   Column(Modifier.weight(1f)){Text(title,color=Color(0xFFF4F1E8),fontWeight=FontWeight.SemiBold);Text(if(granted)"دسترسی فعال است" else description,color=if(granted)Color(0xFF72E6B5) else muted,fontSize=11.sp)}
-   AnimatedVisibility(visible=granted,enter=fadeIn()+scaleIn()){Icon(Icons.Default.CheckCircle,contentDescription="فعال",tint=Color(0xFF35D399),modifier=Modifier.size(30.dp))}
-   if(!granted)TextButton(onClick=act){Text("فعال‌سازی",color=teal)}
-  }
- }
-}
-@Composable private fun Today(plans:List<Plan>,user:String,card:Color,fg:Color,onSave:(Plan)->Unit,onUpdate:(Plan)->Unit,onDelete:(Plan)->Unit){
- val context=LocalContext.current
- var create by remember{mutableStateOf(false)};var editing by remember{mutableStateOf<Plan?>(null)};var deleteConfirm by remember{mutableStateOf<Plan?>(null)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
- var selectedPlanId by remember { mutableStateOf(plans.firstOrNull{it.date==LocalDate.now().toString()}?.id ?: "") };val todaysPlans=plans.filter{it.date==LocalDate.now().toString()};if(todaysPlans.none{it.id==selectedPlanId})selectedPlanId=todaysPlans.firstOrNull()?.id ?: "";val p=todaysPlans.firstOrNull{it.id==selectedPlanId};val done=p?.lessons?.count{it.finished>0}?:0
- LaunchedEffect(p?.lessons){val activity=context as? ComponentActivity;val intent=activity?.intent;if(intent?.getStringExtra("kind")=="end"){val planId=intent.getStringExtra("planId");val alarmPlan=plans.firstOrNull{it.id==planId} ?: p;if(alarmPlan!=null)selectedPlanId=alarmPlan.id;val id=intent.getStringExtra("lessonId");val lesson=alarmPlan?.lessons?.firstOrNull{it.id==id&&it.finished==0L};if(lesson!=null){finish=lesson;yes=false;count="0"};intent.removeExtra("kind");intent.removeExtra("lessonId");intent.removeExtra("date");intent.removeExtra("planId")}}
- LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),contentPadding=PaddingValues(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
- item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(18.dp)){Text("سلام ${user}، آماده‌ای؟",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("با تمرکز پیش برو؛ استراحت را هم فراموش نکن.",color=muted);Spacer(Modifier.height(10.dp));Text("پیشرفت امروز: ${done}/${p?.lessons?.size?:0} درس",color=teal,fontWeight=FontWeight.Bold)}}}
- item{Row(verticalAlignment=Alignment.CenterVertically){Text("برنامه امروز",color=fg,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Button(onClick={create=true}){Icon(Icons.Default.Add,null);Text("برنامه جدید")}}}
- if(todaysPlans.size>1)item{Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){todaysPlans.forEachIndexed{index,plan->FilterChip(selectedPlanId==plan.id,{selectedPlanId=plan.id},label={Text("برنامه "+(index+1))})}}}
- if(p==null)item{Text("هنوز برنامه‌ای نساختی.",color=muted)}
- if(p!=null){
- item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.fillMaxWidth().padding(12.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("هدف: ${p.target} دقیقه",color=fg);Text("ثبت‌شده: ${p.minutes} دقیقه",color=teal)};Row(verticalAlignment=Alignment.CenterVertically){TextButton(onClick={editing=p}){Icon(Icons.Default.Edit,null);Text("ویرایش برنامه")};Spacer(Modifier.weight(1f));TextButton(onClick={deleteConfirm=p}){Icon(Icons.Default.Delete,null);Text("حذف برنامه")}}}}}
- val gaps=studyBreaks(p.lessons)
- if(gaps.isNotEmpty())item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("استراحت‌های بین درس‌ها",color=teal,fontWeight=FontWeight.Bold);gaps.forEach{g->Text("${fa(g.start)} تا ${fa(g.end)}  ·  ${fa(g.minutes.toString())} دقیقه استراحت",color=muted,fontSize=12.sp,modifier=Modifier.padding(top=5.dp))}}}}
- items(p.lessons){l->Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){
- Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(l.name,color=fg,fontWeight=FontWeight.Bold);Text(l.topic,color=muted,fontSize=12.sp)};Text("${fa(l.start)}–${fa(l.end)}",color=teal)}
- when{l.finished>0->Text("تمام شد · ${l.actual} دقیقه · ${l.tests} تست",color=teal)
- l.started>0->Button(onClick={finish=l;yes=false;count="0"},modifier=Modifier.fillMaxWidth()){Text("پایان درس و ثبت تست")}
- LocalTime.now()>=LocalTime.parse(l.start)&&LocalTime.now()<LocalTime.parse(l.end)->Button(onClick={
- val started=System.currentTimeMillis()
- onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=started) else it}))
- scheduleEnd(context,l,p.date,p.id)
-},modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
- LocalTime.now()>=LocalTime.parse(l.end)->Text("زمان این بازه گذشته است؛ برای ثبت مطالعه، بازه را در برنامه اصلاح کن.",color=muted,fontSize=12.sp)
- else->Text("شروع این درس ساعت "+fa(l.start)+" فعال می‌شود",color=muted,fontSize=12.sp)}
- }}}
- if(p.lessons.all{it.finished>0})item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(16.dp)){val delta=p.minutes-p.target;Text("تحلیل امروز",color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text(if(delta>=0)"به هدف رسیدی؛ ${delta} دقیقه بیشتر!" else "${-delta} دقیقه تا هدف فاصله داشتی.",color=teal);Text("مجموع تست: ${p.tests}",color=fg);p.lessons.forEach{Text("${it.name}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)};Bars(p.lessons.map{it.name to it.actual.toFloat()},teal)}}}
- }
- }
- if(create)CreateDialog(null,{create=false},onSave)
- if(editing!=null)CreateDialog(editing,{editing=null},onUpdate)
- if(deleteConfirm!=null)AlertDialog(onDismissRequest={deleteConfirm=null},title={Text("حذف برنامه؟")},text={Text("این برنامه و گزارش درس‌های آن حذف می‌شود.")},confirmButton={TextButton(onClick={onDelete(deleteConfirm!!);deleteConfirm=null}){Text("حذف")}},dismissButton={TextButton(onClick={deleteConfirm=null}){Text("انصراف")}})
- if(finish!=null&&p!=null)AlertDialog(onDismissRequest={finish=null},title={Text("تست این درس را زدی؟")},text={Column{Row{FilterChip(yes,{yes=true},label={Text("بله")});Spacer(Modifier.width(8.dp));FilterChip(!yes,{yes=false},label={Text("خیر")})};if(yes)OutlinedTextField(count,{count=it.filter(Char::isDigit)},label={Text("تعداد تست")})}},confirmButton={TextButton(onClick={val l=finish!!;onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(finished=System.currentTimeMillis(),tests=if(yes)count.toIntOrNull()?:0 else 0)else it},closed=p.lessons.all{it.id==l.id||it.finished>0}));finish=null}){Text("ثبت")}})
-}
-@Composable
-private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit) {
-    val context = LocalContext.current
-    var target by remember { mutableStateOf((old?.target ?: 240).toString()) }
-    var planDate by remember { mutableStateOf(old?.date ?: LocalDate.now().toString()) }
-    var lessons by remember {
-        mutableStateOf(old?.lessons ?: listOf(Lesson(name = "", topic = "", start = "09:00", end = "10:00")))
-    }
-    var error by remember { mutableStateOf("") }
+internal fun jalaliMonthLength(year:Int,month:Int):Int=if(month<=6)31 else if(month<=11)30 else if(jalaliParts(jalaliToGregorian(year,12,30)).day==30)30 else 29
+internal fun speakTime(s:String):String=runCatching{"ساعت "+LocalTime.parse(s).hour+" و "+LocalTime.parse(s).minute+" دقیقه"}.getOrDefault(s)
 
-    AlertDialog(
-        onDismissRequest = close,
-        title = { Text(if(old==null)"ساخت برنامه" else "ویرایش برنامه") },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp)) {
-                OutlinedTextField(
-                    value = target,
-                    onValueChange = { target = it.filter(Char::isDigit) },
-                    label = { Text("هدف مطالعه به دقیقه") },
-                    singleLine = true
-                )
-                TextButton(onClick={
-                    val d=runCatching{LocalDate.parse(planDate)}.getOrDefault(LocalDate.now())
-                    DatePickerDialog(context,{_,y,m,day->planDate=LocalDate.of(y,m+1,day).toString()},d.year,d.monthValue-1,d.dayOfMonth).show()
-                }) { Text("تاریخ برنامه: ${runCatching{jalali(LocalDate.parse(planDate))}.getOrDefault(planDate)}") }
-                Spacer(Modifier.height(8.dp))
-                LazyColumn(Modifier.weight(1f, fill = false)) {
-                    items(lessons, key = { it.id }) { lesson ->
-                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(Modifier.padding(8.dp)) {
-                                OutlinedTextField(
-                                    value = lesson.name,
-                                    onValueChange = { value ->
-                                        lessons = lessons.map { if (it.id == lesson.id) it.copy(name = value) else it }
-                                    },
-                                    label = { Text("نام درس") },
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = lesson.topic,
-                                    onValueChange = { value ->
-                                        lessons = lessons.map { if (it.id == lesson.id) it.copy(topic = value) else it }
-                                    },
-                                    label = { Text("موضوع") },
-                                    singleLine = true
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(onClick = {
-                                        chooseTime(context, lesson.start) { value ->
-                                            lessons = lessons.map { if (it.id == lesson.id) it.copy(start = value) else it }
-                                        }
-                                    }) { Text("شروع ${lesson.start}") }
-                                    TextButton(onClick = {
-                                        chooseTime(context, lesson.end) { value ->
-                                            lessons = lessons.map { if (it.id == lesson.id) it.copy(end = value) else it }
-                                        }
-                                    }) { Text("پایان ${lesson.end}") }
-                                    Spacer(Modifier.weight(1f))
-                                    IconButton(onClick = {
-                                        if (lessons.size > 1) lessons = lessons.filterNot { it.id == lesson.id }
-                                    }) { Icon(Icons.Default.Delete, contentDescription = "حذف درس") }
-                                }
-                            }
-                        }
-                    }
-                }
-                TextButton(onClick = {
-                    lessons = lessons + Lesson(name = "", topic = "", start = "10:15", end = "11:15")
-                }) { Text("+ افزودن درس") }
-                if (error.isNotBlank()) {
-                    Text(error, color = MaterialTheme.colorScheme.error)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val sorted = lessons.sortedBy { it.start }
-                val targetValue = target.toIntOrNull()
-                if (targetValue != null && isValidPlan(targetValue, sorted)) {
-                    savePlan(Plan(id = old?.id ?: UUID.randomUUID().toString(), date = planDate, target = targetValue, lessons = sorted))
-                    close()
-                } else {
-                    error = "نام و موضوع درس، ساعت‌ها، هدف و نبود تداخل را بررسی کن."
-                }
-            }) { Text("ذخیره") }
-        },
-        dismissButton = { TextButton(onClick = close) { Text("انصراف") } }
-    )
+data class StudyItem(val id:String=UUID.randomUUID().toString(),val subject:String,val title:String,val date:String,val start:String,val end:String,val note:String="",val done:Boolean=false,val studied:Int=0) {
+    val duration:Int get()=runCatching{Duration.between(LocalTime.parse(start),LocalTime.parse(end)).toMinutes().toInt()}.getOrDefault(0)
 }
-private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCatching{LocalTime.parse(initial)}.getOrDefault(LocalTime.NOON);TimePickerDialog(c,{_,h,m->done("%02d:%02d".format(h,m))},t.hour,t.minute,true).show()}
-@Composable private fun Bars(data:List<Pair<String,Float>>,color:Color){if(data.isEmpty())Text("داده‌ای ثبت نشده",color=muted)else{val max=data.maxOf{it.second}.coerceAtLeast(1f);data.forEach{(n,v)->Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.padding(vertical=4.dp)){Text(n,color=muted,modifier=Modifier.width(65.dp),fontSize=11.sp);Box(Modifier.weight(1f).height(8.dp).clip(CircleShape).background(color.copy(alpha=.16f))){Box(Modifier.fillMaxWidth((v/max).coerceIn(0f,1f)).fillMaxHeight().background(color))};Text(v.toInt().toString(),color=muted,modifier=Modifier.width(28.dp),textAlign=TextAlign.End,fontSize=11.sp)}}}}
-@Composable private fun Reports(plans:List<Plan>,card:Color,fg:Color){
- var range by remember{mutableStateOf("هفتگی")}
- val today=LocalDate.now();val days=when(range){"روزانه"->1;"هفتگی"->7;"ماهانه"->30;else->90};val from=today.minusDays((days-1).toLong())
- val scoped=plans.filter{runCatching{val d=LocalDate.parse(it.date);!d.isBefore(from)&&!d.isAfter(today)}.getOrDefault(false)}
- val byDay=(0 until days).map{i->val d=from.plusDays(i.toLong());val mins=scoped.filter{it.date==d.toString()}.sumOf{it.minutes};val jp=jalaliParts(d);"${jp.day}/${jp.month}" to mins.toFloat()}
- val tests=scoped.flatMap{it.lessons}.groupBy{it.name}.mapValues{(_,v)->v.sumOf{it.tests}.toFloat()}.toList().sortedByDescending{it.second}
- val total=scoped.sumOf{it.minutes};val testTotal=scoped.sumOf{it.tests}
- Column(Modifier.fillMaxSize().padding(16.dp)){
-  Text("گزارش عملکرد",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold)
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){listOf("روزانه","هفتگی","ماهانه","سه‌ماهه").forEach{FilterChip(range==it,{range=it},label={Text(it)})}}
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
-   Card(Modifier.weight(1f),colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(12.dp)){Text("زمان مطالعه",color=muted,fontSize=12.sp);Text("${fa(total.toString())} دقیقه",color=teal,fontSize=19.sp,fontWeight=FontWeight.Bold)}}
-   Card(Modifier.weight(1f),colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(12.dp)){Text("تعداد تست",color=muted,fontSize=12.sp);Text(fa(testTotal.toString()),color=Color(0xFFF2B66D),fontSize=19.sp,fontWeight=FontWeight.Bold)}}
-  }
-  LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp)){
-   item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("روند زمان مطالعه روزانه (دقیقه)",color=fg);Bars(byDay.filter{it.second>0f},teal)}}}
-   item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("تعداد تست به تفکیک درس",color=fg);Bars(tests,Color(0xFFF2B66D))}}}
-   items(scoped.sortedByDescending{it.date}){p->Text("${jalali(LocalDate.parse(p.date))} · ${fa(p.minutes.toString())} دقیقه · ${fa(p.tests.toString())} تست",color=muted,modifier=Modifier.padding(8.dp))}
-  }
- }
+data class TestResult(val id:String=UUID.randomUUID().toString(),val subject:String,val title:String,val date:String,val total:Int,val correct:Int,val wrong:Int,val blank:Int,val minutes:Int) {
+    val percent:Int get()=if(total==0)0 else (correct*100f/total).roundToInt()
 }
-@Composable private fun CalendarView(plans:List<Plan>,card:Color,fg:Color) {
-    val current = jalaliParts(LocalDate.now())
-    var year by remember { mutableIntStateOf(current.year) }
-    var month by remember { mutableIntStateOf(current.month) }
-    var selected by remember { mutableStateOf(LocalDate.now()) }
-    val dayCount = jalaliMonthLength(year,month)
-    val firstDay = jalaliToGregorian(year,month,1)
-    val offset = (firstDay.dayOfWeek.value + 1) % 7
-    val selectedPlans = plans.filter { it.date == selected.toString() }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick={ if(month==1){month=12;year--}else month-- }) { Icon(Icons.Default.ChevronLeft,null,tint=fg) }
-            Text("${jalaliMonths[month-1]} ${fa(year.toString())}",color=fg,fontSize=20.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),textAlign=TextAlign.Center)
-            IconButton(onClick={ if(month==12){month=1;year++}else month++ }) { Icon(Icons.Default.ChevronRight,null,tint=fg) }
-        }
-        Row { listOf("ش","ی","د","س","چ","پ","ج").forEach { Text(it,Modifier.weight(1f).padding(vertical=8.dp),color=muted,textAlign=TextAlign.Center) } }
-        for (week in 0..5) {
-            Row {
-                for (column in 0..6) {
-                    val day = week*7 + column - offset + 1
-                    val valid = day in 1..dayCount
-                    val date = if(valid) runCatching { jalaliToGregorian(year,month,day) }.getOrNull() else null
-                    val active = date == selected
-                    val hasPlan = date?.let { d -> plans.any { it.date == d.toString() } } ?: false
-                    Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(RoundedCornerShape(9.dp))
-                        .background(if(active) teal else card).clickable(valid) { if(date!=null) selected=date },
-                        contentAlignment=Alignment.Center) {
-                        if(valid) Column(horizontalAlignment=Alignment.CenterHorizontally) {
-                            Text(fa(day.toString()),color=if(active) ink else fg)
-                            if(hasPlan) Box(Modifier.padding(top=2.dp).size(5.dp).background(if(active) ink else teal,CircleShape))
-                        }
-                    }
+data class FocusRecord(val subject:String,val title:String,val date:String,val minutes:Int)
+data class Workspace(val items:List<StudyItem> = emptyList(),val tests:List<TestResult> = emptyList(),val focus:List<FocusRecord> = emptyList(),val goal:Int=240,val activeId:String="",val activeSince:Long=0L,val elapsed:Long=0L)
+
+private fun load(c:Context):Workspace=runCatching {
+    val root=JSONObject(c.getSharedPreferences(PREF,0).getString(STORE,"{}")?:"{}")
+    val ia=root.optJSONArray("items")?:JSONArray()
+    val items=(0 until ia.length()).map{val o=ia.getJSONObject(it);StudyItem(o.optString("id"),o.optString("subject"),o.optString("title"),o.optString("date"),o.optString("start"),o.optString("end"),o.optString("note"),o.optBoolean("done"),o.optInt("studied"))}
+    val ta=root.optJSONArray("tests")?:JSONArray()
+    val tests=(0 until ta.length()).map{val o=ta.getJSONObject(it);TestResult(o.optString("id"),o.optString("subject"),o.optString("title"),o.optString("date"),o.optInt("total"),o.optInt("correct"),o.optInt("wrong"),o.optInt("blank"),o.optInt("minutes"))}
+    val fa=root.optJSONArray("focus")?:JSONArray()
+    val focus=(0 until fa.length()).map{val o=fa.getJSONObject(it);FocusRecord(o.optString("subject"),o.optString("title"),o.optString("date"),o.optInt("minutes"))}
+    Workspace(items,tests,focus,root.optInt("goal",240),root.optString("activeId"),root.optLong("activeSince"),root.optLong("elapsed"))
+}.getOrDefault(Workspace())
+private fun save(c:Context,w:Workspace) {
+    val items=JSONArray();w.items.forEach{items.put(JSONObject().put("id",it.id).put("subject",it.subject).put("title",it.title).put("date",it.date).put("start",it.start).put("end",it.end).put("note",it.note).put("done",it.done).put("studied",it.studied))}
+    val tests=JSONArray();w.tests.forEach{tests.put(JSONObject().put("id",it.id).put("subject",it.subject).put("title",it.title).put("date",it.date).put("total",it.total).put("correct",it.correct).put("wrong",it.wrong).put("blank",it.blank).put("minutes",it.minutes))}
+    val focus=JSONArray();w.focus.forEach{focus.put(JSONObject().put("subject",it.subject).put("title",it.title).put("date",it.date).put("minutes",it.minutes))}
+    val root=JSONObject().put("items",items).put("tests",tests).put("focus",focus).put("goal",w.goal).put("activeId",w.activeId).put("activeSince",w.activeSince).put("elapsed",w.elapsed)
+    c.getSharedPreferences(PREF,0).edit().putString(STORE,root.toString()).apply()
+}
+
+class MainActivity:ComponentActivity(){
+    override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);ensureChannel(this);setContent{PaceApp()}}
+}
+@Composable fun PaceApp(){
+    val c= LocalContext.current
+    var data by remember{mutableStateOf(load(c))}
+    var page by remember{mutableIntStateOf(0)}
+    var date by remember{mutableStateOf(LocalDate.now().toString())}
+    var editor by remember{mutableStateOf<StudyItem?>(null)}
+    var showEditor by remember{mutableStateOf(false)}
+    var showTest by remember{mutableStateOf(false)}
+    var tick by remember{mutableLongStateOf(System.currentTimeMillis())}
+    var message by remember{mutableStateOf("")}
+    var dark by remember{mutableStateOf(c.getSharedPreferences(PREF,0).getBoolean("dark_mode",true))}
+    val snack= remember{SnackbarHostState()}
+    fun commit(w:Workspace){data=w;save(c,w)}
+    LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(1000);tick=System.currentTimeMillis();data=load(c)}}
+    LaunchedEffect(message){if(message.isNotBlank()){snack.showSnackbar(message);message=""}}
+    val active=data.items.firstOrNull{it.id==data.activeId}
+    val elapsed=if(data.activeSince>0)data.elapsed+(tick-data.activeSince)else data.elapsed
+    val bg=if(dark)BG else Color(0xFFF1F5F9)
+    val card=if(dark)SURFACE else Color.White
+    val fg=if(dark)FG else Color(0xFF17243A)
+    val soft=if(dark)MUTED else Color(0xFF65758B)
+    MaterialTheme(colorScheme=if(dark)darkColorScheme(primary=ACCENT,background=bg,surface=card,onSurface=fg)else lightColorScheme(primary=Color(0xFF087F70),background=bg,surface=card,onSurface=fg)){
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl){
+            Scaffold(containerColor=bg,snackbarHost={SnackbarHost(snack)},topBar={
+                Row(Modifier.fillMaxWidth().background(bg).padding(horizontal=20.dp,vertical=13.dp),verticalAlignment=Alignment.CenterVertically){
+                    Column(Modifier.weight(1f)){Text("AMZ PACE",color=ACCENT,fontSize=11.sp,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text(listOf("داشبورد مطالعه","برنامه‌ریز درسی","تمرکز عمیق","تحلیل عملکرد","تقویم و سوابق","تنظیمات")[page],color=fg,fontSize=21.sp,fontWeight=FontWeight.Bold)}
+                    IconButton(onClick={page=5}){Icon(Icons.Default.Settings,null,tint=soft)}
+                    Box(Modifier.size(38.dp).clip(CircleShape).background(SURFACE2),contentAlignment=Alignment.Center){Text("A",color=ACCENT,fontWeight=FontWeight.Black)}
                 }
-            }
-        }
-        Card(Modifier.fillMaxWidth().weight(1f),colors=CardDefaults.cardColors(containerColor=card)) {
-            Column(Modifier.padding(14.dp)) {
-                Text(jalali(selected),color=fg,fontWeight=FontWeight.Bold)
-                if(selectedPlans.isEmpty()) Text("برای این روز برنامه یا گزارشی ثبت نشده است.",color=muted,modifier=Modifier.padding(top=8.dp))
-                else {
-                    Text("${fa(selectedPlans.sumOf{it.minutes}.toString())} دقیقه مطالعه · ${fa(selectedPlans.sumOf{it.tests}.toString())} تست",color=teal,modifier=Modifier.padding(vertical=8.dp))
-                    LazyColumn {
-                        items(selectedPlans.flatMap { it.lessons },key={it.id}) { lesson ->
-                            Column(Modifier.fillMaxWidth().padding(vertical=5.dp)) {
-                                Text(lesson.name,color=fg,fontWeight=FontWeight.SemiBold)
-                                Text("${lesson.topic} · ${lesson.start} تا ${lesson.end}",color=muted,fontSize=12.sp)
-                                Text("${fa(lesson.actual.toString())} دقیقه مطالعه · ${fa(lesson.tests.toString())} تست",color=teal,fontSize=12.sp)
-                            }
-                        }
+            },bottomBar={
+                NavigationBar(containerColor=card){
+                    val labels=listOf("خانه","برنامه","تمرکز","تحلیل","تقویم")
+                    val icons=listOf(Icons.Default.Home,Icons.Default.EventNote,Icons.Default.Timer,Icons.Default.Insights,Icons.Default.CalendarMonth)
+                    labels.forEachIndexed{i,label->NavigationBarItem(selected=page==i,onClick={page=i},icon={Icon(icons[i],null)},label={Text(label,fontSize=10.sp)},colors=NavigationBarItemDefaults.colors(selectedIconColor=ACCENT,selectedTextColor=ACCENT,indicatorColor=ACCENT.copy(alpha=.12f),unselectedIconColor=soft,unselectedTextColor=soft))}
+                }
+            },floatingActionButton={
+                if(page==1)FloatingActionButton(onClick={editor=null;showEditor=true},containerColor=ACCENT,contentColor=BG){Icon(Icons.Default.Add,null)}
+                if(page==3)FloatingActionButton(onClick={showTest=true},containerColor=ACCENT,contentColor=BG){Icon(Icons.Default.AddTask,null)}
+            }){padding->
+                AnimatedContent(page,label="pages",modifier=Modifier.padding(padding)){p->
+                    when(p){
+                        0->Dashboard(data,active,elapsed,card,fg,soft,onPlan={page=1},onFocus={page=2},onAdd={page=1;editor=null;showEditor=true},onDone={item->commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(done=!it.done)else it}))})
+                        1->Planner(data,date,card,fg,soft,onDate={date=it},onEdit={editor=it;showEditor=true},onDone={item->commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(done=!it.done)else it}))},onDelete={item->cancelStudyAlarm(c,item.id);commit(data.copy(items=data.items.filterNot{it.id==item.id}))},onAlarm={item->scheduleStudyAlarm(c,item);message="یادآوری جلسه تنظیم شد"},onAdd={editor=null;showEditor=true})
+                        2->Focus(active,elapsed,data,card,fg,soft,onStart={item->commit(data.copy(activeId=item.id,activeSince=System.currentTimeMillis(),elapsed=0))},onPause={commit(data.copy(activeSince=0,elapsed=elapsed))},onStop={item->val mins=(elapsed/60000).toInt();commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(studied=it.studied+mins,done=true)else it},focus=data.focus+FocusRecord(item.subject,item.title,LocalDate.now().toString(),mins),activeId="",activeSince=0,elapsed=0));message="جلسه ثبت شد: "+mins+" دقیقه"},onChoose={page=1})
+                        3->Analytics(data,card,fg,soft)
+                        4->CalendarScreen(data,date,{date=it;page=1},card,fg,soft)
+                        else->SettingsScreen(data,card,fg,soft,dark,{dark=it;c.getSharedPreferences(PREF,0).edit().putBoolean("dark_mode",it).apply()},{goal->commit(data.copy(goal=goal))},{message=it})
                     }
                 }
             }
         }
     }
+    if(showEditor)StudyEditor(editor,date,data.items,{showEditor=false},{item->commit(data.copy(items=if(data.items.any{it.id==item.id})data.items.map{if(it.id==item.id)item else it}else data.items+item));scheduleStudyAlarm(c,item);showEditor=false;message="جلسه ذخیره شد"})
+    if(showTest)TestEditor(data.items.map{it.subject}.distinct(),{showTest=false},{test->commit(data.copy(tests=data.tests+test));showTest=false;message="نتیجه آزمون ثبت شد"})
 }
-@Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit,uiLanguage:String,setUiLanguage:(String)->Unit,onUserChanged:(String)->Unit){
- val pref=c.getSharedPreferences(PREF,0)
- var speech by remember{mutableStateOf(pref.getString("speech","fa")?:"fa")}
- var volume by remember{mutableFloatStateOf(pref.getFloat("volume",1f))}
- var displayName by remember{mutableStateOf(pref.getString("user","")?:"")}
- var nameSaved by remember{mutableStateOf(false)}
- Column(Modifier.fillMaxSize().padding(16.dp)){
-  Text(if(uiLanguage=="en")"Settings" else "تنظیمات",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold)
-  Card(Modifier.padding(top=12.dp)){Column(Modifier.padding(16.dp)){
-   Text(if(uiLanguage=="en")"Display name" else "نام کاربر",color=fg)
-   OutlinedTextField(value=displayName,onValueChange={displayName=it;nameSaved=false},singleLine=true,label={Text(if(uiLanguage=="en")"The name used in voice reminders" else "نامی که دستیار صدایت می‌کند")})
-   TextButton(onClick={if(displayName.isNotBlank()){pref.edit().putString("user",displayName.trim()).apply();onUserChanged(displayName.trim());nameSaved=true}}){Text(if(nameSaved){if(uiLanguage=="en")"Saved" else "ذخیره شد"}else{if(uiLanguage=="en")"Save name" else "ذخیره نام"})}
-   Divider()
-   Text(if(uiLanguage=="en")"Interface language" else "زبان رابط کاربری",color=fg)
-   Row{FilterChip(uiLanguage=="fa",{setUiLanguage("fa")},label={Text("فارسی")});FilterChip(uiLanguage=="en",{setUiLanguage("en")},label={Text("English")})}
-   Divider()
-   Text(if(uiLanguage=="en")"Theme" else "پوسته",color=fg)
-   Row{listOf("dark" to (if(uiLanguage=="en")"Dark" else "تیره"),"light" to (if(uiLanguage=="en")"Light" else "روشن")).forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}}
-   Divider()
-   Text(if(uiLanguage=="en")"Speech language" else "زبان گفتار",color=fg)
-   Row{FilterChip(speech=="fa",{speech="fa";pref.edit().putString("speech",speech).apply()},label={Text("فارسی")});FilterChip(speech=="en",{speech="en";pref.edit().putString("speech",speech).apply()},label={Text("English")})}
-   Text(if(uiLanguage=="en")"Speech volume: ${(volume*100).toInt()}%" else "بلندی صدا: ${(volume*100).toInt()}٪",color=fg)
-   Slider(volume,{volume=it},onValueChangeFinished={pref.edit().putFloat("volume",volume).apply()})
-   Text("AMZ Pace",color=teal,fontWeight=FontWeight.Bold,fontSize=18.sp)
-   Text(if(uiLanguage=="en")"Made by Amin" else "ساخته شده توسط امین",color=muted)
-  }}
- }
+
+@Composable private fun Dashboard(w:Workspace,active:StudyItem?,elapsed:Long,card:Color,fg:Color,soft:Color,onPlan:()->Unit,onFocus:()->Unit,onAdd:()->Unit,onDone:(StudyItem)->Unit){
+    val today=LocalDate.now().toString()
+    val todays=w.items.filter{it.date==today}.sortedBy{it.start}
+    val minutes=w.focus.filter{it.date==today}.sumOf{it.minutes}+w.items.filter{it.date==today}.sumOf{it.studied}
+    val progress=(minutes.toFloat()/w.goal.coerceAtLeast(1)).coerceIn(0f,1f)
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(13.dp)){
+        item{Card(colors=CardDefaults.cardColors(containerColor=SURFACE2),shape=RoundedCornerShape(25.dp)){Column(Modifier.fillMaxWidth().padding(19.dp)){
+            Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("امروز، "+jalali(LocalDate.now()),color=MUTED,fontSize=12.sp);Text("با تمرکز جلو برو",color=FG,fontSize=21.sp,fontWeight=FontWeight.Bold);Text("هر جلسه یک قدم به هدف نزدیک‌ترت می‌کند.",color=MUTED,fontSize=11.sp)};Box(Modifier.size(76.dp),contentAlignment=Alignment.Center){Canvas(Modifier.fillMaxSize()){drawArc(ACCENT.copy(alpha=.18f),-90f,360f,false,style=Stroke(8.dp.toPx()));drawArc(ACCENT,-90f,progress*360,false,style=Stroke(8.dp.toPx(),cap=StrokeCap.Round))};Text((progress*100).roundToInt().toString()+"٪",color=ACCENT,fontWeight=FontWeight.Bold)}}
+            Spacer(Modifier.height(15.dp));Text(formatMinutes(minutes)+" از "+formatMinutes(w.goal),color=FG,fontSize=22.sp,fontWeight=FontWeight.Black);Spacer(Modifier.height(7.dp));LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(7.dp).clip(CircleShape),color=ACCENT,trackColor=Color.White.copy(alpha=.12f))
+        }}}
+        item{Row(horizontalArrangement=Arrangement.spacedBy(9.dp)){MiniMetric("جلسه‌ها",todays.size.toString(),Icons.Default.MenuBook,ACCENT,card,fg,Modifier.weight(1f));MiniMetric("تکمیل‌شده",todays.count{it.done}.toString(),Icons.Default.CheckCircle,BLUE,card,fg,Modifier.weight(1f));MiniMetric("آزمون‌ها",w.tests.count{it.date==today}.toString(),Icons.Default.Quiz,GOLD,card,fg,Modifier.weight(1f))}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){
+            Text(if(active==null)"آماده شروع یک جلسه‌ای؟" else "جلسه فعال",color=ACCENT,fontWeight=FontWeight.Bold,fontSize=12.sp)
+            Text(if(active==null)"برنامه امروزت را مدیریت کن" else active.subject+" · "+active.title,color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold)
+            if(active!=null)Text("زمان سپری‌شده "+clock(elapsed),color=soft)
+            Spacer(Modifier.height(10.dp));Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick=if(active==null)onPlan else onFocus,modifier=Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Text(if(active==null)"برنامه من" else "ادامه تمرکز")};OutlinedButton(onClick=onAdd,modifier=Modifier.weight(1f)){Icon(Icons.Default.Add,null);Text("جلسه جدید")}}
+        }}}
+        item{Row(verticalAlignment=Alignment.CenterVertically){Text("برنامه امروز",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(todays.count{it.done}.toString()+" / "+todays.size,color=soft,fontSize=12.sp)}}
+        if(todays.isEmpty())item{Empty("روزت را برنامه‌ریزی کن","اولین جلسه مطالعه را اضافه کن.",Icons.Default.EventNote)}
+        items(todays,key={it.id}){item->ItemCard(item,card,fg,soft,{onDone(item)},{},{})}
+        item{TextButton(onClick=onPlan,modifier=Modifier.fillMaxWidth()){Text("مشاهده برنامه کامل");Icon(Icons.Default.ArrowBack,null)}}
+    }
 }
+
+@Composable private fun Planner(w:Workspace,date:String,card:Color,fg:Color,soft:Color,onDate:(String)->Unit,onEdit:(StudyItem)->Unit,onDone:(StudyItem)->Unit,onDelete:(StudyItem)->Unit,onAlarm:(StudyItem)->Unit,onAdd:()->Unit){
+    val d=runCatching{LocalDate.parse(date)}.getOrDefault(LocalDate.now())
+    val list=w.items.filter{it.date==date}.sortedBy{it.start}
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        item{Card(colors=CardDefaults.cardColors(containerColor=SURFACE2),shape=RoundedCornerShape(22.dp)){Column(Modifier.padding(16.dp)){
+            Text("برنامه‌ریزی هوشمند",color=FG,fontSize=19.sp,fontWeight=FontWeight.Bold);Text("جلسه‌ها را مرتب کن و فاصله‌های استراحت را ببین.",color=MUTED,fontSize=11.sp)
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={onDate(d.minusDays(1).toString())}){Icon(Icons.Default.ChevronRight,null,tint=FG)};Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){Text(jalali(d),color=ACCENT,fontWeight=FontWeight.Bold,fontSize=16.sp);Text(if(d==LocalDate.now())"امروز" else d.dayOfWeek.name,color=MUTED,fontSize=10.sp)};IconButton(onClick={onDate(d.plusDays(1).toString())}){Icon(Icons.Default.ChevronLeft,null,tint=FG)}}
+            Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){(0..6).forEach{n->val day=LocalDate.now().plusDays(n.toLong());val selected=day.toString()==date;Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if(selected)ACCENT else Color.White.copy(alpha=.06f)).clickable{onDate(day.toString())}.padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally){Text(listOf("ش","ی","د","س","چ","پ","ج")[day.dayOfWeek.value%7],color=if(selected)BG else MUTED,fontSize=10.sp);Text(jalaliParts(day).day.toString(),color=if(selected)BG else FG,fontWeight=FontWeight.Bold)}}}
+        }}}
+        item{Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("جلسه‌های روز",color=fg,fontSize=18.sp,fontWeight=FontWeight.Bold);Text(list.size.toString()+" جلسه · "+list.sumOf{it.duration}+" دقیقه",color=soft,fontSize=11.sp)};FilledTonalButton(onClick=onAdd){Icon(Icons.Default.Add,null);Text("افزودن")}}}
+        if(list.isEmpty())item{Empty("برنامه‌ای برای این روز نیست","یک جلسه جدید تعریف کن.",Icons.Default.EventNote)}
+        items(list,key={it.id}){item->ItemCard(item,card,fg,soft,{onDone(item)},{onAlarm(item)},{onEdit(item);onDelete(item)})}
+        val gaps=studyBreaks(list.map{Lesson(name=it.subject,topic=it.title,start=it.start,end=it.end)})
+        if(gaps.isNotEmpty()){item{Text("استراحت‌های پیشنهادی",color=fg,fontSize=16.sp,fontWeight=FontWeight.Bold)};items(gaps){g->Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(card).padding(13.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Coffee,null,tint=GOLD);Spacer(Modifier.width(9.dp));Text(g.start+" – "+g.end,color=fg,modifier=Modifier.weight(1f));Text(g.minutes.toString()+" دقیقه",color=GOLD,fontWeight=FontWeight.Bold)}}}
+    }
+}
+
+@Composable private fun Focus(active:StudyItem?,elapsed:Long,w:Workspace,card:Color,fg:Color,soft:Color,onStart:(StudyItem)->Unit,onPause:()->Unit,onStop:(StudyItem)->Unit,onChoose:()->Unit){
+    Column(Modifier.fillMaxSize().padding(20.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(15.dp)){
+        Spacer(Modifier.height(20.dp))
+        Box(Modifier.size(245.dp),contentAlignment=Alignment.Center){Canvas(Modifier.fillMaxSize()){drawArc(ACCENT.copy(alpha=.15f),-90f,360f,false,style=Stroke(12.dp.toPx()));if(active!=null)drawArc(ACCENT,-90f,((elapsed/1000)%3600)/3600f*360f,false,style=Stroke(12.dp.toPx(),cap=StrokeCap.Round))};Column(horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Default.SelfImprovement,null,tint=ACCENT,modifier=Modifier.size(30.dp));Text(clock(elapsed),color=fg,fontSize=42.sp,fontWeight=FontWeight.Black);Text(if(active==null)"آماده شروع" else "در حال تمرکز",color=soft,fontSize=12.sp)}}
+        if(active==null){Text("زمان تمرکز",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("جلسه‌ای را از برنامه انتخاب کن تا زمان واقعی مطالعه ثبت شود.",color=soft,textAlign=TextAlign.Center);Button(onClick=onChoose,colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Icon(Icons.Default.List,null);Text("انتخاب جلسه")}}
+        else{Text(active.subject,color=ACCENT,fontWeight=FontWeight.Bold);Text(active.title,color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text(active.start+" تا "+active.end+" · "+active.duration+" دقیقه",color=soft);Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){if(w.activeSince>0)OutlinedButton(onClick=onPause){Icon(Icons.Default.Pause,null);Text("مکث")}else Button(onClick={onStart(active)},colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Icon(Icons.Default.PlayArrow,null);Text("ادامه")};Button(onClick={onStop(active)},colors=ButtonDefaults.buttonColors(containerColor=BLUE,contentColor=BG)){Icon(Icons.Default.Stop,null);Text("پایان جلسه")}}}
+        Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp)){Text("حالت مطالعه عمیق",color=fg,fontWeight=FontWeight.Bold);Text("یک مبحث مشخص را انتخاب کن، اعلان‌های مزاحم را کنار بگذار و در پایان زمان واقعی را ثبت کن.",color=soft,fontSize=12.sp)}}
+    }
+}
+
+@Composable private fun Analytics(w:Workspace,card:Color,fg:Color,soft:Color){
+    val now=LocalDate.now();val days=(6 downTo 0).map{now.minusDays(it.toLong())}
+    val values=days.map{d->w.focus.filter{it.date==d.toString()}.sumOf{it.minutes}+w.items.filter{it.date==d.toString()}.sumOf{it.studied}}
+    val tests=w.tests.filter{it.date>=now.minusDays(6).toString()}
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(13.dp)){
+        item{Text("تحلیل هفتگی",color=fg,fontSize=19.sp,fontWeight=FontWeight.Bold);Text("بر اساس داده‌های ثبت‌شده در برنامه",color=soft,fontSize=11.sp)}
+        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){MiniMetric("مطالعه",formatMinutes(values.sum()),Icons.Default.Timer,ACCENT,card,fg,Modifier.weight(1f));MiniMetric("تست",tests.sumOf{it.total}.toString(),Icons.Default.Quiz,GOLD,card,fg,Modifier.weight(1f));MiniMetric("میانگین درصد",(if(tests.isEmpty())0 else tests.map{it.percent}.average().roundToInt()).toString()+"٪",Icons.Default.TrendingUp,BLUE,card,fg,Modifier.weight(1f))}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Text("نمودار زمان مطالعه",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(14.dp));val max=values.maxOrNull()?.coerceAtLeast(60)?:60;Row(Modifier.fillMaxWidth().height(150.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.Bottom){values.forEachIndexed{i,v->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Bottom){Text(if(v>0)v.toString() else "",color=soft,fontSize=9.sp);Box(Modifier.width(19.dp).height((v.toFloat()/max*105).coerceAtLeast(4f).dp).clip(RoundedCornerShape(topStart=6.dp,topEnd=6.dp)).background(if(i==6)ACCENT else BLUE.copy(alpha=.65f)));Text(listOf("ش","ی","د","س","چ","پ","ج")[days[i].dayOfWeek.value%7],color=soft,fontSize=10.sp,modifier=Modifier.padding(top=5.dp))}}}}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Text("تحلیل آزمون‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);if(tests.isEmpty())Text("هنوز آزمونی ثبت نشده است.",color=soft);tests.sortedByDescending{it.date}.forEach{t->Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(t.subject+" · "+t.title,color=fg,fontWeight=FontWeight.SemiBold);Text(t.date+" · "+t.correct+" صحیح / "+t.wrong+" غلط / "+t.blank+" نزده",color=soft,fontSize=10.sp)};Text(t.percent.toString()+"٪",color=ACCENT,fontWeight=FontWeight.Bold,fontSize=18.sp)};HorizontalDivider(color=soft.copy(alpha=.15f))}}}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Text("مقایسه درس‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);val subjects=(w.items.map{it.subject}+w.tests.map{it.subject}).distinct();if(subjects.isEmpty())Text("با ثبت مطالعه و آزمون، تحلیل درس‌ها نمایش داده می‌شود.",color=soft);subjects.forEach{s->val mins=w.focus.filter{it.subject==s}.sumOf{it.minutes}+w.items.filter{it.subject==s}.sumOf{it.studied};val ts=w.tests.filter{it.subject==s};Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(s,color=fg,fontWeight=FontWeight.SemiBold);Text(formatMinutes(mins)+" مطالعه · "+ts.size+" آزمون",color=soft,fontSize=10.sp)};Text(if(ts.isEmpty())"—" else ts.map{it.percent}.average().roundToInt().toString()+"٪",color=ACCENT,fontWeight=FontWeight.Bold)}}}}}
+    }
+}
+
+@Composable private fun CalendarScreen(w:Workspace,selected:String,onSelect:(String)->Unit,card:Color,fg:Color,soft:Color){
+    var month by remember{mutableStateOf(YearMonth.now())}
+    val first=month.atDay(1);val blanks=first.dayOfWeek%7
+    val dates=(0 until blanks).map{null}+(1..month.lengthOfMonth()).map{month.atDay(it)}
+    val chosen=runCatching{LocalDate.parse(selected)}.getOrDefault(LocalDate.now())
+    Column(Modifier.fillMaxSize().padding(17.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(21.dp)){Column(Modifier.padding(14.dp)){
+            Row(verticalAlignment=Alignment.CenterVertically){IconButton(onClick={month=month.minusMonths(1)}){Icon(Icons.Default.ChevronRight,null,tint=fg)};Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){val jp=jalaliParts(month.atDay(1));Text(jalaliMonthName(jp.month)+" "+jp.year,color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text("تقویم فعالیت‌ها",color=soft,fontSize=10.sp)};IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronLeft,null,tint=fg)}}
+            Row(Modifier.fillMaxWidth()){listOf("ش","ی","د","س","چ","پ","ج").forEach{Text(it,Modifier.weight(1f),color=soft,textAlign=TextAlign.Center,fontSize=11.sp)}}
+            dates.chunked(7).forEach{row->Row(Modifier.fillMaxWidth()){row.forEach{d->Box(Modifier.weight(1f).aspectRatio(1f).padding(3.dp).clip(RoundedCornerShape(9.dp)).background(if(d==chosen)ACCENT else if(d==LocalDate.now())BLUE.copy(alpha=.2f) else Color.Transparent).clickable(enabled=d!=null){d?.let{onSelect(it.toString())}},contentAlignment=Alignment.Center){if(d!=null)Column(horizontalAlignment=Alignment.CenterHorizontally){Text(jalaliParts(d).day.toString(),color=if(d==chosen)BG else fg,fontWeight=FontWeight.Bold);if(w.items.any{it.date==d.toString()})Box(Modifier.size(4.dp).clip(CircleShape).background(if(d==chosen)BG else ACCENT))}}}}}
+        }}
+        Text("سوابق "+jalali(chosen),color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold)
+        val list=w.items.filter{it.date==selected}.sortedBy{it.start}
+        if(list.isEmpty())Empty("داده‌ای برای این روز نیست","روز دیگری را انتخاب کن یا برنامه‌ای ثبت کن.",Icons.Default.EventBusy)
+        else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(list,key={it.id}){it->Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(card).padding(13.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(it.subject+" · "+it.title,color=fg,fontWeight=FontWeight.SemiBold);Text(it.start+" – "+it.end,color=soft,fontSize=11.sp)};Text(if(it.done)"انجام شد" else "برنامه",color=if(it.done)ACCENT else GOLD,fontSize=11.sp)}}}
+    }
+}
+
+@Composable private fun SettingsScreen(w:Workspace,card:Color,fg:Color,soft:Color,dark:Boolean,onTheme:(Boolean)->Unit,onGoal:(Int)->Unit,onMessage:(String)->Unit){
+    var goal by remember{mutableStateOf(w.goal.toString())}
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("ظاهر برنامه",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("حالت تاریک",color=fg,modifier=Modifier.weight(1f));Switch(dark,onTheme)}}}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("هدف روزانه مطالعه",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("هدف را بر اساس دقیقه تنظیم کن.",color=soft,fontSize=11.sp);OutlinedTextField(goal,{goal=it},label={Text("دقیقه در روز")},singleLine=true);Button(onClick={val n=goal.toIntOrNull();if(n!=null&&n in 15..1440){onGoal(n);onMessage("هدف روزانه ذخیره شد")}else onMessage("عدد باید بین ۱۵ تا ۱۴۴۰ باشد")},colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Text("ذخیره هدف")}}}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("یادآوری‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("برای هشدار دقیق، مجوز اعلان و هشدار دقیق اندروید باید فعال باشد.",color=soft,fontSize=12.sp);Button(onClick={onMessage("از تنظیمات اندروید، اعلان‌ها و مجوز هشدار دقیق AMZ Pace را فعال کن.")},colors=ButtonDefaults.buttonColors(containerColor=BLUE,contentColor=BG)){Icon(Icons.Default.NotificationsActive,null);Text("راهنمای فعال‌سازی")}}}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("درباره AMZ Pace",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("نسخه بازطراحی‌شده مدیریت مطالعه",color=soft,fontSize=12.sp);Text("برنامه‌ریزی · تمرکز · تحلیل · آزمون",color=ACCENT,fontSize=13.sp);Spacer(Modifier.height(8.dp));Text("ساخته شده توسط امین",color=soft,fontSize=11.sp)}}}
+    }
+}
+
+@Composable private fun StudyEditor(old:StudyItem?,date:String,existing:List<StudyItem>,close:()->Unit,saveItem:(StudyItem)->Unit){
+    var subject by remember{mutableStateOf(old?.subject?:"")};var title by remember{mutableStateOf(old?.title?:"")};var day by remember{mutableStateOf(old?.date?:date)};var start by remember{mutableStateOf(old?.start?:"09:00")};var end by remember{mutableStateOf(old?.end?:"10:00")};var note by remember{mutableStateOf(old?.note?:"")};var error by remember{mutableStateOf("")}
+    AlertDialog(onDismissRequest=close,containerColor=SURFACE,title={Text(if(old==null)"ساخت جلسه مطالعه" else "ویرایش جلسه",color=FG,fontWeight=FontWeight.Bold)},text={Column(verticalArrangement=Arrangement.spacedBy(7.dp)){
+        OutlinedTextField(subject,{subject=it},label={Text("نام درس")},singleLine=true);OutlinedTextField(title,{title=it},label={Text("مبحث / عنوان")},singleLine=true);OutlinedTextField(day,{day=it},label={Text("تاریخ YYYY-MM-DD")},singleLine=true)
+        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){OutlinedTextField(start,{start=it},modifier=Modifier.weight(1f),label={Text("شروع HH:MM")},singleLine=true);OutlinedTextField(end,{end=it},modifier=Modifier.weight(1f),label={Text("پایان HH:MM")},singleLine=true)}
+        OutlinedTextField(note,{note=it},label={Text("یادداشت")},minLines=2);if(error.isNotBlank())Text(error,color=DANGER,fontSize=11.sp)
+    }},confirmButton={Button(onClick={
+        val valid=runCatching{LocalDate.parse(day);LocalTime.parse(start);LocalTime.parse(end).isAfter(LocalTime.parse(start))}.getOrDefault(false)
+        val overlap=existing.any{it.id!=old?.id&&it.date==day&&start<it.end&&end>it.start}
+        when{subject.isBlank()||title.isBlank()->error="نام درس و مبحث الزامی است";!valid->error="تاریخ یا ساعت معتبر نیست";overlap->error="این ساعت با جلسه دیگری تداخل دارد";else->saveItem(StudyItem(old?.id?:UUID.randomUUID().toString(),subject.trim(),title.trim(),day,start,end,note.trim(),old?.done?:false,old?.studied?:0))}
+    },colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Text("ذخیره")}},dismissButton={TextButton(onClick=close){Text("انصراف",color=MUTED)}})
+}
+@Composable private fun TestEditor(subjects:List<String>,close:()->Unit,saveTest:(TestResult)->Unit){
+    var subject by remember{mutableStateOf(subjects.firstOrNull()?:"")};var title by remember{mutableStateOf("")};var total by remember{mutableStateOf("20")};var correct by remember{mutableStateOf("15")};var wrong by remember{mutableStateOf("3")};var blank by remember{mutableStateOf("2")};var mins by remember{mutableStateOf("30")};var error by remember{mutableStateOf("")}
+    AlertDialog(onDismissRequest=close,containerColor=SURFACE,title={Text("ثبت نتیجه آزمون",color=FG,fontWeight=FontWeight.Bold)},text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
+        OutlinedTextField(subject,{subject=it},label={Text("درس")});OutlinedTextField(title,{title=it},label={Text("عنوان آزمون")})
+        Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){OutlinedTextField(total,{total=it},modifier=Modifier.weight(1f),label={Text("کل")});OutlinedTextField(correct,{correct=it},modifier=Modifier.weight(1f),label={Text("صحیح")})}
+        Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){OutlinedTextField(wrong,{wrong=it},modifier=Modifier.weight(1f),label={Text("غلط")});OutlinedTextField(blank,{blank=it},modifier=Modifier.weight(1f),label={Text("نزده")})}
+        OutlinedTextField(mins,{mins=it},label={Text("زمان دقیقه")});if(error.isNotBlank())Text(error,color=DANGER)
+    }},confirmButton={Button(onClick={val t=total.toIntOrNull()?:0;val c=correct.toIntOrNull()?:-1;val x=wrong.toIntOrNull()?:-1;val b=blank.toIntOrNull()?:-1;val m=mins.toIntOrNull()?:-1;if(subject.isBlank()||t<=0||c<0||x<0||b<0||c+x+b!=t||m<0)error="مقادیر آزمون را بررسی کن" else saveTest(TestResult(subject=subject,title=title,date=LocalDate.now().toString(),total=t,correct=c,wrong=x,blank=b,minutes=m))},colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Text("ثبت")}},dismissButton={TextButton(onClick=close){Text("انصراف",color=MUTED)}})
+}
+@Composable private fun ItemCard(item:StudyItem,card:Color,fg:Color,soft:Color,onDone:()->Unit,onAlarm:()->Unit,onEdit:()->Unit){
+    Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(17.dp),modifier=Modifier.fillMaxWidth()){
+        Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){
+            Column(Modifier.width(53.dp),horizontalAlignment=Alignment.CenterHorizontally){Text(item.start,color=ACCENT,fontWeight=FontWeight.Bold,fontSize=13.sp);Box(Modifier.padding(vertical=4.dp).width(2.dp).height(20.dp).background(ACCENT.copy(alpha=.4f)));Text(item.end,color=soft,fontSize=11.sp)}
+            Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text(item.subject,color=fg,fontWeight=FontWeight.Bold);Text(item.title,color=soft,fontSize=11.sp);Text(item.duration.toString()+" دقیقه · "+if(item.done)"انجام شد" else "برنامه‌ریزی‌شده",color=if(item.done)ACCENT else GOLD,fontSize=10.sp)}
+            Column{IconButton(onClick=onDone){Icon(if(item.done)Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,null,tint=if(item.done)ACCENT else soft)};Row{IconButton(onClick=onAlarm){Icon(Icons.Default.NotificationsActive,null,tint=GOLD,modifier=Modifier.size(18.dp))};IconButton(onClick=onEdit){Icon(Icons.Default.Edit,null,tint=soft,modifier=Modifier.size(18.dp))}}}
+        }
+    }
+}
+@Composable private fun MiniMetric(label:String,value:String,icon:androidx.compose.ui.graphics.vector.ImageVector,color:Color,card:Color,fg:Color,modifier:Modifier=Modifier){
+    Card(modifier=modifier,colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(15.dp)){Column(Modifier.fillMaxWidth().padding(10.dp)){Icon(icon,null,tint=color,modifier=Modifier.size(18.dp));Spacer(Modifier.height(7.dp));Text(value,color=fg,fontWeight=FontWeight.Black,fontSize=17.sp);Text(label,color=MUTED,fontSize=9.sp,maxLines=1)}}
+}
+@Composable private fun Empty(title:String,description:String,icon:androidx.compose.ui.graphics.vector.ImageVector){Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SURFACE).padding(23.dp),horizontalAlignment=Alignment.CenterHorizontally){Icon(icon,null,tint=ACCENT,modifier=Modifier.size(30.dp));Spacer(Modifier.height(8.dp));Text(title,color=FG,fontWeight=FontWeight.Bold);Text(description,color=MUTED,fontSize=11.sp,textAlign=TextAlign.Center)}}
+private fun formatMinutes(n:Int)=if(n<60)n.toString()+" دقیقه" else (n/60).toString()+" ساعت "+(n%60).toString()+" دقیقه"
+private fun clock(ms:Long):String{val s=(ms/1000).coerceAtLeast(0);return "%02d:%02d:%02d".format(s/3600,(s%3600)/60,s%60)}
+private fun jalali(d:LocalDate):String{val p=jalaliParts(d);return p.day.toString()+" "+jalaliMonthName(p.month)+" "+p.year}
+private fun jalaliMonthName(m:Int)=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند").getOrElse(m-1){"ماه"}
+private fun ensureChannel(c:Context){if(Build.VERSION.SDK_INT>=26){val ch=NotificationChannel(CHANNEL,"هشدارهای مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی و دیداری جلسه‌های مطالعه";enableVibration(true)};c.getSystemService(NotificationManager::class.java).createNotificationChannel(ch)}}
+private fun scheduleStudyAlarm(c:Context,item:StudyItem){
+    val at=runCatching{LocalDate.parse(item.date).atTime(LocalTime.parse(item.start)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()}.getOrDefault(0L);if(at<=System.currentTimeMillis())return
+    val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("subject",item.subject).putExtra("title",item.title).putExtra("start",item.start)
+    val pi=PendingIntent.getBroadcast(c,item.id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val am=c.getSystemService(AlarmManager::class.java);if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi)else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
+}
+private fun cancelStudyAlarm(c:Context,id:String){val pi=PendingIntent.getBroadcast(c,id.hashCode(),Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE);if(pi!=null){c.getSystemService(AlarmManager::class.java).cancel(pi);pi.cancel()}}
+class StudyAlarmReceiver:BroadcastReceiver(){
+    override fun onReceive(context:Context,intent:Intent){
+        ensureChannel(context)
+        val subject=intent.getStringExtra("subject")?:"جلسه مطالعه";val title=intent.getStringExtra("title")?:"";val time=intent.getStringExtra("start")?:""
+        val open=PendingIntent.getActivity(context,0,Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n=NotificationCompat.Builder(context,CHANNEL).setSmallIcon(R.drawable.ic_amz_pace).setContentTitle("زمان شروع مطالعه").setContentText(subject+" · "+title+" · "+time).setStyle(NotificationCompat.BigTextStyle().bigText("زمان شروع جلسه "+subject+"، مبحث "+title+" فرا رسیده است. برنامه را باز کن و تایمر تمرکز را شروع کن.")).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setAutoCancel(true).setDefaults(NotificationCompat.DEFAULT_ALL).setContentIntent(open).build()
+        val nm=context.getSystemService(NotificationManager::class.java)
+        if(Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(context,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)nm.notify((subject+title+time).hashCode(),n)
+    }
+}
+class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(context:Context,intent:Intent){if(intent.action==Intent.ACTION_BOOT_COMPLETED)load(context).items.filterNot{it.done}.forEach{scheduleStudyAlarm(context,it)}}}
