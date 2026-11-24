@@ -13,6 +13,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -132,7 +135,7 @@ private fun hasAccess(c:Context):Boolean{
  var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")}
  var tick by remember{mutableIntStateOf(0)};LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(1000);tick++;plans=load(c)}}
  var permissionRefresh by remember{mutableIntStateOf(0)}
- LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(650);permissionRefresh++}}
+ DisposableEffect(c){val owner=c as? LifecycleOwner;val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_RESUME)permissionRefresh++};owner?.lifecycle?.addObserver(observer);onDispose{owner?.lifecycle?.removeObserver(observer)}}
  val notificationGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<33 || ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)
  val exactAlarmGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<31 || c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms())
  val fullScreenGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<34 || c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent())
