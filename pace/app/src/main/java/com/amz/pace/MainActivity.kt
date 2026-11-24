@@ -3,6 +3,7 @@ package com.amz.pace
 
 import android.Manifest
 import android.app.*
+import android.icu.util.PersianCalendar
 import android.content.*
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -94,6 +95,20 @@ private fun jalali(d:LocalDate):String{
  val m=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
  return "${fa(jd.toString())} ${m[jm-1]} ${fa(jy.toString())}"
 }
+private data class JalaliParts(val year:Int,val month:Int,val day:Int)
+private fun jalaliParts(date:LocalDate):JalaliParts{
+ val c=PersianCalendar().apply{timeInMillis=date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()}
+ return JalaliParts(c.get(PersianCalendar.YEAR),c.get(PersianCalendar.MONTH)+1,c.get(PersianCalendar.DAY_OF_MONTH))
+}
+private fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate{
+ val c=PersianCalendar().apply{clear();set(PersianCalendar.YEAR,year);set(PersianCalendar.MONTH,month-1);set(PersianCalendar.DAY_OF_MONTH,day);set(PersianCalendar.HOUR_OF_DAY,12)}
+ return Instant.ofEpochMilli(c.timeInMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+}
+private fun jalaliMonthLength(year:Int,month:Int):Int{
+ val c=PersianCalendar().apply{clear();set(PersianCalendar.YEAR,year);set(PersianCalendar.MONTH,month-1);set(PersianCalendar.DAY_OF_MONTH,1)}
+ return c.getActualMaximum(PersianCalendar.DAY_OF_MONTH)
+}
+private val jalaliMonths=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 private fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${t.hour} و ${t.minute} دقیقه"}.getOrDefault(s)
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
@@ -317,17 +332,34 @@ private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit
 private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCatching{LocalTime.parse(initial)}.getOrDefault(LocalTime.NOON);TimePickerDialog(c,{_,h,m->done("%02d:%02d".format(h,m))},t.hour,t.minute,true).show()}
 @Composable private fun Bars(data:List<Pair<String,Float>>,color:Color){if(data.isEmpty())Text("داده‌ای ثبت نشده",color=muted)else{val max=data.maxOf{it.second}.coerceAtLeast(1f);data.forEach{(n,v)->Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.padding(vertical=4.dp)){Text(n,color=muted,modifier=Modifier.width(65.dp),fontSize=11.sp);Box(Modifier.weight(1f).height(8.dp).clip(CircleShape).background(color.copy(alpha=.16f))){Box(Modifier.fillMaxWidth((v/max).coerceIn(0f,1f)).fillMaxHeight().background(color))};Text(v.toInt().toString(),color=muted,modifier=Modifier.width(28.dp),textAlign=TextAlign.End,fontSize=11.sp)}}}}
 @Composable private fun Reports(plans:List<Plan>,card:Color,fg:Color){
- var range by remember{mutableStateOf("هفتگی")};val n=when(range){"روزانه"->1;"هفتگی"->7;"ماهانه"->30;else->90};val from=LocalDate.now().minusDays((n-1).toLong());val list=plans.filter{runCatching{!LocalDate.parse(it.date).isBefore(from)}.getOrDefault(false)}
- val lessons=list.flatMap{it.lessons};val byTime=lessons.groupBy{it.name}.mapValues{it.value.sumOf{x->x.actual}.toFloat()};val byTest=lessons.groupBy{it.name}.mapValues{it.value.sumOf{x->x.tests}.toFloat()}
- Column(Modifier.fillMaxSize().padding(16.dp)){Text("گزارش عملکرد",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Row{listOf("روزانه","هفتگی","ماهانه","سه‌ماهه").forEach{FilterChip(range==it,{range=it},label={Text(it)})}};Text("مطالعه: ${lessons.sumOf{it.actual}} دقیقه · تست: ${lessons.sumOf{it.tests}}",color=teal);LazyColumn{item{Card(Modifier.padding(vertical=8.dp)){Column(Modifier.padding(14.dp)){Text("زمان مطالعه هر درس",color=fg);Bars(byTime.toList(),teal)}}};item{Card{Column(Modifier.padding(14.dp)){Text("تعداد تست هر درس",color=fg);Bars(byTest.toList(),Color(0xFFF2B66D))}}};items(list.sortedByDescending{it.date}){p->Text("${jalali(LocalDate.parse(p.date))} · ${p.minutes} دقیقه · ${p.tests} تست",color=muted,modifier=Modifier.padding(8.dp))}}}
+ var range by remember{mutableStateOf("هفتگی")}
+ val today=LocalDate.now();val days=when(range){"روزانه"->1;"هفتگی"->7;"ماهانه"->30;else->90};val from=today.minusDays((days-1).toLong())
+ val scoped=plans.filter{runCatching{val d=LocalDate.parse(it.date);!d.isBefore(from)&&!d.isAfter(today)}.getOrDefault(false)}
+ val byDay=(0 until days).map{i->val d=from.plusDays(i.toLong());val mins=scoped.filter{it.date==d.toString()}.sumOf{it.minutes};val jp=jalaliParts(d);"${jp.day}/${jp.month}" to mins.toFloat()}
+ val tests=scoped.flatMap{it.lessons}.groupBy{it.name}.mapValues{(_,v)->v.sumOf{it.tests}.toFloat()}.toList().sortedByDescending{it.second}
+ val total=scoped.sumOf{it.minutes};val testTotal=scoped.sumOf{it.tests}
+ Column(Modifier.fillMaxSize().padding(16.dp)){
+  Text("گزارش عملکرد",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold)
+  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){listOf("روزانه","هفتگی","ماهانه","سه‌ماهه").forEach{FilterChip(range==it,{range=it},label={Text(it)})}}
+  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+   Card(Modifier.weight(1f),colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(12.dp)){Text("زمان مطالعه",color=muted,fontSize=12.sp);Text("${fa(total.toString())} دقیقه",color=teal,fontSize=19.sp,fontWeight=FontWeight.Bold)}}
+   Card(Modifier.weight(1f),colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(12.dp)){Text("تعداد تست",color=muted,fontSize=12.sp);Text(fa(testTotal.toString()),color=Color(0xFFF2B66D),fontSize=19.sp,fontWeight=FontWeight.Bold)}}
+  }
+  LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp)){
+   item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("روند زمان مطالعه روزانه (دقیقه)",color=fg);Bars(byDay.filter{it.second>0f},teal)}}}
+   item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("تعداد تست به تفکیک درس",color=fg);Bars(tests,Color(0xFFF2B66D))}}}
+   items(scoped.sortedByDescending{it.date}){p->Text("${jalali(LocalDate.parse(p.date))} · ${fa(p.minutes.toString())} دقیقه · ${fa(p.tests.toString())} تست",color=muted,modifier=Modifier.padding(8.dp))}
+  }
+ }
 }
 @Composable private fun CalendarView(plans:List<Plan>,card:Color,fg:Color){
- var month by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))};var selected by remember{mutableStateOf(LocalDate.now())};val p=plans.firstOrNull{it.date==selected.toString()}
- Column(Modifier.fillMaxSize().padding(16.dp)){Row(verticalAlignment=Alignment.CenterVertically){Text("تقویم شمسی",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));IconButton(onClick={month=month.minusMonths(1)}){Icon(Icons.Default.ChevronLeft,null,tint=fg)};IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronRight,null,tint=fg)}};Text(jalali(month),color=teal)
- val offset=(month.dayOfWeek.value+1)%7
- Row{listOf("ش","ی","د","س","چ","پ","ج").forEach{Text(it,Modifier.weight(1f),color=muted,textAlign=TextAlign.Center)}}
- for(w in 0..5)Row{for(col in 0..6){val day=w*7+col-offset+1;Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(RoundedCornerShape(8.dp)).background(if(day in 1..month.lengthOfMonth()&&selected.dayOfMonth==day&&selected.month==month.month)teal else card).clickable(day in 1..month.lengthOfMonth()){selected=month.withDayOfMonth(day)},contentAlignment=Alignment.Center){if(day in 1..month.lengthOfMonth())Column(horizontalAlignment=Alignment.CenterHorizontally){Text(fa(jalali(month.withDayOfMonth(day)).substringBefore(" ")),color=if(selected.dayOfMonth==day&&selected.month==month.month)ink else fg);if(plans.any{it.date==month.withDayOfMonth(day).toString()})Box(Modifier.size(4.dp).background(teal,CircleShape))}}}}
- Card(Modifier.fillMaxWidth().weight(1f)){Column(Modifier.padding(14.dp)){Text(jalali(selected),color=fg,fontWeight=FontWeight.Bold);if(p==null)Text("گزارشی برای این روز نیست.",color=muted)else{Text("${p.minutes} دقیقه مطالعه · ${p.tests} تست",color=teal);p.lessons.forEach{Text("${it.name} — ${it.topic}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)}}}}
+ val now=jalaliParts(LocalDate.now());var year by remember{mutableIntStateOf(now.year)};var month by remember{mutableIntStateOf(now.month)};var selected by remember{mutableStateOf(LocalDate.now())}
+ val count=jalaliMonthLength(year,month);val first=jalaliToGregorian(year,month,1);val offset=(first.dayOfWeek.value+1)%7;val sp=jalaliParts(selected);val p=plans.firstOrNull{it.date==selected.toString()}
+ Column(Modifier.fillMaxSize().padding(16.dp)){
+  Row(verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(month==1){month=12;year--}else month--}){Icon(Icons.Default.ChevronLeft,null,tint=fg)};Text("${jalaliMonths[month-1]} ${fa(year.toString())}",color=fg,fontSize=20.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f),textAlign=TextAlign.Center);IconButton(onClick={if(month==12){month=1;year++}else month++}){Icon(Icons.Default.ChevronRight,null,tint=fg)}}
+  Row{listOf("ش","ی","د","س","چ","پ","ج").forEach{Text(it,Modifier.weight(1f).padding(vertical=8.dp),color=muted,textAlign=TextAlign.Center)}}
+  for(w in 0..5)Row{for(col in 0..6){val day=w*7+col-offset+1;val valid=day in 1..count;val date=if(valid)runCatching{jalaliToGregorian(year,month,day)}.getOrNull()else null;val active=date==selected;val hasPlan=date?.let{d->plans.any{it.date==d.toString()}}?:false;Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(RoundedCornerShape(9.dp)).background(if(active)teal else card).clickable(valid){if(date!=null)selected=date},contentAlignment=Alignment.Center){if(valid)Column(horizontalAlignment=Alignment.CenterHorizontally){Text(fa(day.toString()),color=if(active)ink else fg);if(hasPlan)Box(Modifier.padding(top=2.dp).size(5.dp).background(if(active)ink else teal,CircleShape))}}}}
+  Card(Modifier.fillMaxWidth().weight(1f),colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text(jalali(selected),color=fg,fontWeight=FontWeight.Bold);if(p==null)Text("برای این روز برنامه یا گزارشی ثبت نشده است.",color=muted,modifier=Modifier.padding(top=8.dp))else{Text("${fa(p.minutes.toString())} دقیقه مطالعه · ${fa(p.tests.toString())} تست",color=teal,modifier=Modifier.padding(vertical=8.dp));LazyColumn{items(p.lessons,key={it.id}){l->Column(Modifier.fillMaxWidth().padding(vertical=5.dp)){Text(l.name,color=fg,fontWeight=FontWeight.SemiBold);Text("${l.topic} · ${l.start} تا ${l.end}",color=muted,fontSize=12.sp);Text("${fa(l.actual.toString())} دقیقه مطالعه · ${fa(l.tests.toString())} تست",color=teal,fontSize=12.sp)}}}}}
  }
 }
 @Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit){
