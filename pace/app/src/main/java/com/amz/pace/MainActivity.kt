@@ -211,7 +211,7 @@ class MainActivity:ComponentActivity(){
         }}}
         item{Row(verticalAlignment=Alignment.CenterVertically){Text("برنامه امروز",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Text(todays.count{it.done}.toString()+" / "+todays.size,color=soft,fontSize=12.sp)}}
         if(todays.isEmpty())item{Empty("روزت را برنامه‌ریزی کن","اولین جلسه مطالعه را اضافه کن.",Icons.Default.EventNote)}
-        items(todays,key={it.id}){item->ItemCard(item,card,fg,soft,{onDone(item)},{},{})}
+        items(todays,key={it.id}){item->ItemCard(item,card,fg,soft,{onDone(item)},{},{},{},{})}
         item{TextButton(onClick=onPlan,modifier=Modifier.fillMaxWidth()){Text("مشاهده برنامه کامل");Icon(Icons.Default.ArrowBack,null)}}
     }
 }
