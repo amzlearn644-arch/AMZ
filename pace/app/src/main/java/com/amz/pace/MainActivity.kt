@@ -94,12 +94,28 @@ class AnnounceService:Service(),TextToSpeech.OnInitListener{
  override fun onBind(i:Intent?)=null
  override fun onDestroy(){t?.stop();t?.shutdown();super.onDestroy()}
 }
-private fun schedule(c:Context,l:Lesson){val am=c.getSystemService(AlarmManager::class.java);listOf("start" to l.start,"end" to l.end).forEachIndexed{idx,pair->
- val t=LocalTime.parse(pair.second);var at=LocalDate.now().atTime(t).atZone(ZoneId.systemDefault());if(at.toInstant().toEpochMilli()<=System.currentTimeMillis())at=at.plusDays(1)
- val i=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind",pair.first).putExtra("lesson",l.name).putExtra("clock",speakTime(pair.second))
- val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+idx,i,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
- if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi) else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
-}}
+private fun scheduleStart(c:Context,l:Lesson,date:String){
+ val am=c.getSystemService(AlarmManager::class.java)
+ val time=LocalTime.parse(l.start)
+ var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
+ if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) return
+ val intent=Intent(c,StudyAlarmReceiver::class.java)
+  .putExtra("kind","start").putExtra("lesson",l.name).putExtra("clock",speakTime(l.start))
+ val pi=PendingIntent.getBroadcast(c,l.id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+ if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
+ else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
+}
+private fun scheduleEnd(c:Context,l:Lesson,date:String){
+ val am=c.getSystemService(AlarmManager::class.java)
+ val time=LocalTime.parse(l.end)
+ var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
+ if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) at=at.plusDays(1)
+ val intent=Intent(c,StudyAlarmReceiver::class.java)
+  .putExtra("kind","end").putExtra("lesson",l.name).putExtra("clock",speakTime(l.end))
+ val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+1,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+ if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
+ else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
+}
 private fun hasAccess(c:Context):Boolean{
  val n=Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED
  val a=Build.VERSION.SDK_INT<31||c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
@@ -121,7 +137,7 @@ private fun hasAccess(c:Context):Boolean{
  !hasAccess(c)->Column(Modifier.fillMaxSize().padding(22.dp),verticalArrangement=Arrangement.Center){Text("برای شروع باید دسترسی‌ها را فعال کنی",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("این مجوزها برای اعلان و زنگ دقیق درس‌ها استفاده می‌شوند.",color=muted);AccessRow("اعلان‌ها"){if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS)};AccessRow("آلارم دقیق"){if(Build.VERSION.SDK_INT>=31)c.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:${c.packageName}")))};AccessRow("نمایش تمام‌صفحه"){if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:${c.packageName}")))};Button(onClick={tick++}){Text("بررسی دوباره")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
- AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans);plan.lessons.forEach{schedule(c,it)}},{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans)})
+ AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans)})
  1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme){theme=it;pref.edit().putString("theme",it).apply()}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Settings)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
@@ -144,7 +160,11 @@ private fun hasAccess(c:Context):Boolean{
  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(l.name,color=fg,fontWeight=FontWeight.Bold);Text(l.topic,color=muted,fontSize=12.sp)};Text("${fa(l.start)}–${fa(l.end)}",color=teal)}
  when{l.finished>0->Text("تمام شد · ${l.actual} دقیقه · ${l.tests} تست",color=teal)
  l.started>0->Button(onClick={finish=l;yes=false;count="0"},modifier=Modifier.fillMaxWidth()){Text("پایان درس و ثبت تست")}
- LocalTime.now()>=LocalTime.parse(l.start)->Button(onClick={onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=System.currentTimeMillis()) else it}))},modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
+ LocalTime.now()>=LocalTime.parse(l.start)->Button(onClick={
+ val started=System.currentTimeMillis()
+ onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=started) else it}))
+ scheduleEnd(LocalContext.current,l,p.date)
+},modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
  else->Text("شروع این درس ساعت "+fa(l.start)+" فعال می‌شود",color=muted,fontSize=12.sp)}
  }}}
  if(p.lessons.all{it.finished>0})item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(16.dp)){val delta=p.minutes-p.target;Text("تحلیل امروز",color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text(if(delta>=0)"به هدف رسیدی؛ ${delta} دقیقه بیشتر!" else "${-delta} دقیقه تا هدف فاصله داشتی.",color=teal);Text("مجموع تست: ${p.tests}",color=fg);p.lessons.forEach{Text("${it.name}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)};Bars(p.lessons.map{it.name to it.actual.toFloat()},teal)}}}
@@ -265,5 +285,5 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
 }
 @Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit){
  val pref=c.getSharedPreferences(PREF,0);var speech by remember{mutableStateOf(pref.getString("speech","fa")?:"fa")};var volume by remember{mutableFloatStateOf(pref.getFloat("volume",1f))}
- Column(Modifier.fillMaxSize().padding(16.dp)){Text("تنظیمات",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Card(Modifier.padding(top=12.dp)){Column(Modifier.padding(16.dp)){Text("پوسته",color=fg);Row{listOf("dark" to "تیره","light" to "روشن").forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}};Divider();Text("زبان گفتار",color=fg);Row{FilterChip(speech=="fa",{speech="fa";pref.edit().putString("speech",speech).apply()},label={Text("فارسی")});FilterChip(speech=="en",{speech="en";pref.edit().putString("speech",speech).apply()},label={Text("English")})};Text("بلندی صدا: ${(volume*100).toInt()}٪",color=fg);Slider(volume,{volume=it},onValueChangeFinished={pref.edit().putFloat("volume",volume).apply()});Text("AMZ Pace",color=teal,fontWeight=FontWeight.Bold,fontSize=18.sp);Text("Created by Amin",color=muted)}}}
+ Column(Modifier.fillMaxSize().padding(16.dp)){Text("تنظیمات",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Card(Modifier.padding(top=12.dp)){Column(Modifier.padding(16.dp)){Text("پوسته",color=fg);Row{listOf("dark" to "تیره","light" to "روشن").forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}};Divider();Text("زبان گفتار",color=fg);Row{FilterChip(speech=="fa",{speech="fa";pref.edit().putString("speech",speech).apply()},label={Text("فارسی")});FilterChip(speech=="en",{speech="en";pref.edit().putString("speech",speech).apply()},label={Text("English")})};Text("بلندی صدا: ${(volume*100).toInt()}٪",color=fg);Slider(volume,{volume=it},onValueChangeFinished={pref.edit().putFloat("volume",volume).apply()});Text("AMZ Pace",color=teal,fontWeight=FontWeight.Bold,fontSize=18.sp);Text("ساخته شده توسط امین",color=muted)}}}
 }
