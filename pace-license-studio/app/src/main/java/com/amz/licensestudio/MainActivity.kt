@@ -188,9 +188,6 @@ private fun StudioScreenUnlocked() {
                             ) { Text("ساخت جفت‌کلید امن روی این گوشی") }
                         }
                         if (keyReady) {
-                            if (publicKey.isBlank()) {
-                                publicKey = runCatching { derivePublicKey(keyFile.readBytes()) }.getOrDefault("")
-                            }
                             Text("کلید عمومی (برای ارسال به سازنده AMZ Pace)", color = mint, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Spacer(Modifier.height(6.dp))
                             Text(publicKey, color = white, fontSize = 11.sp)
