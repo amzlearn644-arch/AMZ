@@ -98,7 +98,7 @@ private fun scheduleStart(c:Context,l:Lesson,date:String){
  val am=c.getSystemService(AlarmManager::class.java)
  val time=LocalTime.parse(l.start)
  var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
- if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) return
+ if(at.toInstant().toEpochMilli()<=System.currentTimeMillis() || l.started>0 || l.finished>0) return
  val intent=Intent(c,StudyAlarmReceiver::class.java)
   .putExtra("kind","start").putExtra("lesson",l.name).putExtra("clock",speakTime(l.start))
  val pi=PendingIntent.getBroadcast(c,l.id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -148,6 +148,7 @@ private fun hasAccess(c:Context):Boolean{
 @Composable private fun Logo(size:Int){Box(Modifier.size(size.dp).clip(RoundedCornerShape((size/3).dp)).background(ink),contentAlignment=Alignment.Center){Canvas(Modifier.fillMaxSize(.68f)){drawCircle(teal,style=Stroke(size.dp.toPx()*.09f));drawLine(paper,center,androidx.compose.ui.geometry.Offset(center.x,center.y*.52f),size.dp.toPx()*.08f,cap=StrokeCap.Round);drawLine(paper,center,androidx.compose.ui.geometry.Offset(center.x+size.dp.toPx()*.2f,center.y+size.dp.toPx()*.12f),size.dp.toPx()*.08f,cap=StrokeCap.Round)}}}
 @Composable private fun AccessRow(s:String,act:()->Unit){Card(Modifier.fillMaxWidth().padding(vertical=5.dp)){Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Text(s,Modifier.weight(1f));TextButton(onClick=act){Text("فعال‌سازی")}}}}
 @Composable private fun Today(plans:List<Plan>,user:String,card:Color,fg:Color,onSave:(Plan)->Unit,onUpdate:(Plan)->Unit){
+ val context=LocalContext.current
  var create by remember{mutableStateOf(false)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
  val p=plans.firstOrNull{it.date==LocalDate.now().toString()};val done=p?.lessons?.count{it.finished>0}?:0
  LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),contentPadding=PaddingValues(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
@@ -163,7 +164,7 @@ private fun hasAccess(c:Context):Boolean{
  LocalTime.now()>=LocalTime.parse(l.start)->Button(onClick={
  val started=System.currentTimeMillis()
  onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=started) else it}))
- scheduleEnd(LocalContext.current,l,p.date)
+ scheduleEnd(context,l,p.date)
 },modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
  else->Text("شروع این درس ساعت "+fa(l.start)+" فعال می‌شود",color=muted,fontSize=12.sp)}
  }}}
