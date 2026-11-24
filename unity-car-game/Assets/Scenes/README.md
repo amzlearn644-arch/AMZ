@@ -1,0 +1,1 @@
+The Editor menu command **AMZ Racer → Create Racing Scene** generates `AMZRacer.unity` in this folder. The generated scene is intentionally not committed; create it after importing the Assets folder into Unity.
