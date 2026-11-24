@@ -36,7 +36,8 @@ private fun deviceFingerprint(context: Context): String {
     return hash.joinToString("") { "%02X".format(it) }
 }
 
-private fun validateLicense(code: String, device: String): Boolean = try {
+private fun validateLicense(code: String, device: String): Boolean {
+    return try {
     val parts = code.trim().split(".")
     if (parts.size != 3 || parts[0] != "AMZP1") return false
     val payload = Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -52,8 +53,9 @@ private fun validateLicense(code: String, device: String): Boolean = try {
     verifier.init(false, Ed25519PublicKeyParameters(publicKey, 0))
     verifier.update(payload, 0, payload.size)
     verifier.verifySignature(signature)
-} catch (_: Throwable) {
-    false
+    } catch (_: Throwable) {
+        false
+    }
 }
 
 @Composable
