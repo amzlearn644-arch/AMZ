@@ -13,8 +13,5 @@
         </activity>
         <receiver android:name=".StudyAlarmReceiver" android:exported="false"/>
         <receiver android:name=".PaceBootReceiver" android:enabled="true" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>
-        <service android:name=".AnnounceService" android:exported="false" android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Announcing scheduled study reminders to the user"/>
-        </service>
     </application>
 </manifest>
