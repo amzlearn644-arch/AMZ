@@ -241,7 +241,7 @@ private fun hasAccess(c:Context):Boolean{
  setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
- AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans)})
+ AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans)},{plan->plans=plans.filterNot{it.id==plan.id};save(c,plans)})
  1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme){theme=it;pref.edit().putString("theme",it).apply()}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
@@ -259,9 +259,9 @@ private fun hasAccess(c:Context):Boolean{
   }
  }
 }
-@Composable private fun Today(plans:List<Plan>,user:String,card:Color,fg:Color,onSave:(Plan)->Unit,onUpdate:(Plan)->Unit){
+@Composable private fun Today(plans:List<Plan>,user:String,card:Color,fg:Color,onSave:(Plan)->Unit,onUpdate:(Plan)->Unit,onDelete:(Plan)->Unit){
  val context=LocalContext.current
- var create by remember{mutableStateOf(false)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
+ var create by remember{mutableStateOf(false)};var editing by remember{mutableStateOf<Plan?>(null)};var deleteConfirm by remember{mutableStateOf<Plan?>(null)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
  var selectedPlanId by remember { mutableStateOf(plans.firstOrNull{it.date==LocalDate.now().toString()}?.id ?: "") };val todaysPlans=plans.filter{it.date==LocalDate.now().toString()};if(todaysPlans.none{it.id==selectedPlanId})selectedPlanId=todaysPlans.firstOrNull()?.id ?: "";val p=todaysPlans.firstOrNull{it.id==selectedPlanId};val done=p?.lessons?.count{it.finished>0}?:0
  LaunchedEffect(p?.lessons){val activity=context as? ComponentActivity;val intent=activity?.intent;if(intent?.getStringExtra("kind")=="end"){val planId=intent.getStringExtra("planId");val alarmPlan=plans.firstOrNull{it.id==planId} ?: p;if(alarmPlan!=null)selectedPlanId=alarmPlan.id;val id=intent.getStringExtra("lessonId");val lesson=alarmPlan?.lessons?.firstOrNull{it.id==id&&it.finished==0L};if(lesson!=null){finish=lesson;yes=false;count="0"};intent.removeExtra("kind");intent.removeExtra("lessonId");intent.removeExtra("date");intent.removeExtra("planId")}}
  LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),contentPadding=PaddingValues(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
@@ -270,7 +270,7 @@ private fun hasAccess(c:Context):Boolean{
  if(todaysPlans.size>1)item{Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){todaysPlans.forEachIndexed{index,plan->FilterChip(selectedPlanId==plan.id,{selectedPlanId=plan.id},label={Text("برنامه "+(index+1))})}}}
  if(p==null)item{Text("هنوز برنامه‌ای نساختی.",color=muted)}
  if(p!=null){
- item{Card(colors=CardDefaults.cardColors(containerColor=card)){Row(Modifier.fillMaxWidth().padding(15.dp),horizontalArrangement=Arrangement.SpaceBetween){Text("هدف: ${p.target} دقیقه",color=fg);Text("ثبت‌شده: ${p.minutes} دقیقه",color=teal)}}}
+ item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.fillMaxWidth().padding(12.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("هدف: ${p.target} دقیقه",color=fg);Text("ثبت‌شده: ${p.minutes} دقیقه",color=teal)};Row(verticalAlignment=Alignment.CenterVertically){TextButton(onClick={editing=p}){Icon(Icons.Default.Edit,null);Text("ویرایش برنامه")};Spacer(Modifier.weight(1f));TextButton(onClick={deleteConfirm=p,}){Icon(Icons.Default.Delete,null);Text("حذف برنامه")}}}}}
  val gaps=studyBreaks(p.lessons)
  if(gaps.isNotEmpty())item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("استراحت‌های بین درس‌ها",color=teal,fontWeight=FontWeight.Bold);gaps.forEach{g->Text("${fa(g.start)} تا ${fa(g.end)}  ·  ${fa(g.minutes.toString())} دقیقه استراحت",color=muted,fontSize=12.sp,modifier=Modifier.padding(top=5.dp))}}}}
  items(p.lessons){l->Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){
@@ -289,12 +289,15 @@ private fun hasAccess(c:Context):Boolean{
  }
  }
  if(create)CreateDialog(null,{create=false},onSave)
+ if(editing!=null)CreateDialog(editing,{editing=null},onUpdate)
+ if(deleteConfirm!=null)AlertDialog(onDismissRequest={deleteConfirm=null},title={Text("حذف برنامه؟")},text={Text("این برنامه و گزارش درس‌های آن حذف می‌شود.")},confirmButton={TextButton(onClick={onDelete(deleteConfirm!!);deleteConfirm=null}){Text("حذف")}},dismissButton={TextButton(onClick={deleteConfirm=null}){Text("انصراف")}})
  if(finish!=null&&p!=null)AlertDialog(onDismissRequest={finish=null},title={Text("تست این درس را زدی؟")},text={Column{Row{FilterChip(yes,{yes=true},label={Text("بله")});Spacer(Modifier.width(8.dp));FilterChip(!yes,{yes=false},label={Text("خیر")})};if(yes)OutlinedTextField(count,{count=it.filter(Char::isDigit)},label={Text("تعداد تست")})}},confirmButton={TextButton(onClick={val l=finish!!;onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(finished=System.currentTimeMillis(),tests=if(yes)count.toIntOrNull()?:0 else 0)else it},closed=p.lessons.all{it.id==l.id||it.finished>0}));finish=null}){Text("ثبت")}})
 }
 @Composable
 private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit) {
     val context = LocalContext.current
     var target by remember { mutableStateOf((old?.target ?: 240).toString()) }
+    var planDate by remember { mutableStateOf(old?.date ?: LocalDate.now().toString()) }
     var lessons by remember {
         mutableStateOf(old?.lessons ?: listOf(Lesson(name = "", topic = "", start = "09:00", end = "10:00")))
     }
@@ -302,7 +305,7 @@ private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit
 
     AlertDialog(
         onDismissRequest = close,
-        title = { Text("ساخت برنامه") },
+        title = { Text(if(old==null)"ساخت برنامه" else "ویرایش برنامه") },
         text = {
             Column(Modifier.heightIn(max = 520.dp)) {
                 OutlinedTextField(
@@ -311,6 +314,10 @@ private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit
                     label = { Text("هدف مطالعه به دقیقه") },
                     singleLine = true
                 )
+                TextButton(onClick={
+                    val d=runCatching{LocalDate.parse(planDate)}.getOrDefault(LocalDate.now())
+                    DatePickerDialog(context,{_,y,m,day->planDate=LocalDate.of(y,m+1,day).toString()},d.year,d.monthValue-1,d.dayOfMonth).show()
+                }) { Text("تاریخ برنامه: ${runCatching{jalali(LocalDate.parse(planDate))}.getOrDefault(planDate)}") }
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(Modifier.weight(1f, fill = false)) {
                     items(lessons, key = { it.id }) { lesson ->
@@ -365,7 +372,7 @@ private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit
                 val sorted = lessons.sortedBy { it.start }
                 val targetValue = target.toIntOrNull()
                 if (targetValue != null && isValidPlan(targetValue, sorted)) {
-                    savePlan(Plan(id = old?.id ?: UUID.randomUUID().toString(), date = old?.date ?: LocalDate.now().toString(), target = targetValue, lessons = sorted))
+                    savePlan(Plan(id = old?.id ?: UUID.randomUUID().toString(), date = planDate, target = targetValue, lessons = sorted))
                     close()
                 } else {
                     error = "نام و موضوع درس، ساعت‌ها، هدف و نبود تداخل را بررسی کن."
