@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.*
 import android.provider.Settings as AndroidSettings
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -109,7 +110,19 @@ class AnnounceService:Service(),TextToSpeech.OnInitListener{
   val n=NotificationCompat.Builder(this,CH).setSmallIcon(R.drawable.ic_amz_pace).setContentTitle(if(kind=="end")"پایان درس" else "زمان شروع درس").setContentText(msg).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setContentIntent(open).setFullScreenIntent(open,true).build()
   startForeground(3,n);t=TextToSpeech(this,this);return START_NOT_STICKY
  }
- override fun onInit(status:Int){if(status==TextToSpeech.SUCCESS){t?.language=if(msg.contains("well done")||msg.contains("it is time"))Locale.US else Locale("fa","IR");val vol=getSharedPreferences(PREF,0).getFloat("volume",1f);t?.speak(msg,TextToSpeech.QUEUE_FLUSH,Bundle().apply{putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,vol)}, "pace");Handler(mainLooper).postDelayed({stopSelf()},9000)}}
+ override fun onInit(status:Int){
+  if(status!=TextToSpeech.SUCCESS){stopSelf();return}
+  val engine=t?:run{stopSelf();return}
+  engine.setOnUtteranceProgressListener(object:UtteranceProgressListener(){
+   override fun onStart(utteranceId:String?){}
+   override fun onDone(utteranceId:String?){stopSelf()}
+   override fun onError(utteranceId:String?){stopSelf()}
+  })
+  engine.language=if(msg.contains("well done")||msg.contains("it is time"))Locale.US else Locale("fa","IR")
+  val vol=getSharedPreferences(PREF,0).getFloat("volume",1f)
+  val result=engine.speak(msg,TextToSpeech.QUEUE_FLUSH,Bundle().apply{putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME,vol)},"pace")
+  if(result==TextToSpeech.ERROR)stopSelf() else Handler(mainLooper).postDelayed({stopSelf()},30000)
+ }
  override fun onBind(i:Intent?)=null
  override fun onDestroy(){t?.stop();t?.shutdown();super.onDestroy()}
 }
