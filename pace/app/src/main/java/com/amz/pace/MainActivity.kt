@@ -86,6 +86,7 @@ private fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"س�
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
+class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0)scheduleEnd(c,l,p.date)else scheduleStart(c,l,p.date)}}}}}
 class AnnounceService:Service(),TextToSpeech.OnInitListener{
  private var t:TextToSpeech?=null;private var msg=""
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
@@ -116,7 +117,7 @@ private fun scheduleEnd(c:Context,l:Lesson,date:String){
  val am=c.getSystemService(AlarmManager::class.java)
  val time=LocalTime.parse(l.end)
  var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
- if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) at=at.plusDays(1)
+ if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) return
  val intent=Intent(c,StudyAlarmReceiver::class.java)
   .putExtra("kind","end").putExtra("lesson",l.name).putExtra("clock",speakTime(l.end))
  val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+1,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -189,11 +190,12 @@ private fun hasAccess(c:Context):Boolean{
  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(l.name,color=fg,fontWeight=FontWeight.Bold);Text(l.topic,color=muted,fontSize=12.sp)};Text("${fa(l.start)}–${fa(l.end)}",color=teal)}
  when{l.finished>0->Text("تمام شد · ${l.actual} دقیقه · ${l.tests} تست",color=teal)
  l.started>0->Button(onClick={finish=l;yes=false;count="0"},modifier=Modifier.fillMaxWidth()){Text("پایان درس و ثبت تست")}
- LocalTime.now()>=LocalTime.parse(l.start)->Button(onClick={
+ LocalTime.now()>=LocalTime.parse(l.start)&&LocalTime.now()<LocalTime.parse(l.end)->Button(onClick={
  val started=System.currentTimeMillis()
  onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=started) else it}))
  scheduleEnd(context,l,p.date)
 },modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
+ LocalTime.now()>=LocalTime.parse(l.end)->Text("زمان این بازه گذشته است؛ برای ثبت مطالعه، بازه را در برنامه اصلاح کن.",color=muted,fontSize=12.sp)
  else->Text("شروع این درس ساعت "+fa(l.start)+" فعال می‌شود",color=muted,fontSize=12.sp)}
  }}}
  if(p.lessons.all{it.finished>0})item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(16.dp)){val delta=p.minutes-p.target;Text("تحلیل امروز",color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text(if(delta>=0)"به هدف رسیدی؛ ${delta} دقیقه بیشتر!" else "${-delta} دقیقه تا هدف فاصله داشتی.",color=teal);Text("مجموع تست: ${p.tests}",color=fg);p.lessons.forEach{Text("${it.name}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)};Bars(p.lessons.map{it.name to it.actual.toFloat()},teal)}}}
