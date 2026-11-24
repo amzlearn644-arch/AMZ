@@ -270,7 +270,7 @@ private fun hasAccess(c:Context):Boolean{
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
  AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{lesson->cancelLessonAlarms(c,lesson);if(lesson.started>0&&lesson.finished==0L)scheduleEnd(c,lesson,plan.date,plan.id)else scheduleStart(c,lesson,plan.date)};cancelBreakAlarms(c,plan);scheduleBreaks(c,plan)},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)};scheduleBreaks(c,plan)},{plan->plan.lessons.forEach{cancelLessonAlarms(c,it)};cancelBreakAlarms(c,plan);plans=plans.filterNot{it.id==plan.id};save(c,plans)})
- 1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme,{theme=it;pref.edit().putString("theme",it).apply()},uiLanguage){uiLanguage=it;pref.edit().putString("ui_language",it).apply()}}}
+ 1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme,{theme=it;pref.edit().putString("theme",it).apply()},uiLanguage,{uiLanguage=it;pref.edit().putString("ui_language",it).apply()},{user=it;name=it})}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
  }
@@ -488,31 +488,31 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
         }
     }
 }
-@Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit,uiLanguage:String,setUiLanguage:(String)->Unit){
+@Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit,uiLanguage:String,setUiLanguage:(String)->Unit,onUserChanged:(String)->Unit){
  val pref=c.getSharedPreferences(PREF,0)
  var speech by remember{mutableStateOf(pref.getString("speech","fa")?:"fa")}
  var volume by remember{mutableFloatStateOf(pref.getFloat("volume",1f))}
  var displayName by remember{mutableStateOf(pref.getString("user","")?:"")}
  var nameSaved by remember{mutableStateOf(false)}
  Column(Modifier.fillMaxSize().padding(16.dp)){
-  Text("تنظیمات",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold)
+  Text(if(uiLanguage=="en")"Settings" else "تنظیمات",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold)
   Card(Modifier.padding(top=12.dp)){Column(Modifier.padding(16.dp)){
-   Text("نام کاربر",color=fg)
-   OutlinedTextField(value=displayName,onValueChange={displayName=it;nameSaved=false},singleLine=true,label={Text("نامی که دستیار صدایت می‌کند")})
-   TextButton(onClick={if(displayName.isNotBlank()){pref.edit().putString("user",displayName.trim()).apply();nameSaved=true}}){Text(if(nameSaved)"ذخیره شد" else "ذخیره نام")}
+   Text(if(uiLanguage=="en")"Display name" else "نام کاربر",color=fg)
+   OutlinedTextField(value=displayName,onValueChange={displayName=it;nameSaved=false},singleLine=true,label={Text(if(uiLanguage=="en")"The name used in voice reminders" else "نامی که دستیار صدایت می‌کند")})
+   TextButton(onClick={if(displayName.isNotBlank()){pref.edit().putString("user",displayName.trim()).apply();onUserChanged(displayName.trim());nameSaved=true}}){Text(if(nameSaved){if(uiLanguage=="en")"Saved" else "ذخیره شد"}else{if(uiLanguage=="en")"Save name" else "ذخیره نام"})}
    Divider()
-   Text("زبان رابط کاربری",color=fg)
+   Text(if(uiLanguage=="en")"Interface language" else "زبان رابط کاربری",color=fg)
    Row{FilterChip(uiLanguage=="fa",{setUiLanguage("fa")},label={Text("فارسی")});FilterChip(uiLanguage=="en",{setUiLanguage("en")},label={Text("English")})}
    Divider()
-   Text("پوسته",color=fg)
-   Row{listOf("dark" to "تیره","light" to "روشن").forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}}
+   Text(if(uiLanguage=="en")"Theme" else "پوسته",color=fg)
+   Row{listOf("dark" to (if(uiLanguage=="en")"Dark" else "تیره"),"light" to (if(uiLanguage=="en")"Light" else "روشن")).forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}}
    Divider()
-   Text("زبان گفتار",color=fg)
+   Text(if(uiLanguage=="en")"Speech language" else "زبان گفتار",color=fg)
    Row{FilterChip(speech=="fa",{speech="fa";pref.edit().putString("speech",speech).apply()},label={Text("فارسی")});FilterChip(speech=="en",{speech="en";pref.edit().putString("speech",speech).apply()},label={Text("English")})}
-   Text("بلندی صدا: ${(volume*100).toInt()}٪",color=fg)
+   Text(if(uiLanguage=="en")"Speech volume: ${(volume*100).toInt()}%" else "بلندی صدا: ${(volume*100).toInt()}٪",color=fg)
    Slider(volume,{volume=it},onValueChangeFinished={pref.edit().putFloat("volume",volume).apply()})
    Text("AMZ Pace",color=teal,fontWeight=FontWeight.Bold,fontSize=18.sp)
-   Text("ساخته شده توسط امین",color=muted)
+   Text(if(uiLanguage=="en")"Made by Amin" else "ساخته شده توسط امین",color=muted)
   }}
  }
 }
