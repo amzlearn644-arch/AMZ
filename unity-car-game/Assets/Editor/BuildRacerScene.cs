@@ -55,6 +55,8 @@ public static class BuildRacerScene
         car.transform.position = new Vector3(radiusX, 1.05f, -5f);
         car.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
         Rigidbody rb = car.AddComponent<Rigidbody>();
+        BoxCollider carCollider = car.AddComponent<BoxCollider>();
+        carCollider.size = new Vector3(2.05f, 0.8f, 4.15f);
         ArcadeCarController controller = car.AddComponent<ArcadeCarController>();
 
         Part(car.transform, "Main Body", PrimitiveType.Cube, new Vector3(0, 0, 0), new Vector3(2f, 0.62f, 4.1f), blue);
