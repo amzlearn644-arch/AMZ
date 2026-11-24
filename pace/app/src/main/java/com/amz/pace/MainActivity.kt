@@ -104,7 +104,9 @@ internal fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate {
     return LocalDate.of(gy,m+1,days+1)
 }
 internal fun jalaliMonthLength(year:Int,month:Int):Int=if(month<=6)31 else if(month<=11)30 else if(jalaliParts(jalaliToGregorian(year,12,30)).day==30)30 else 29
-internal fun speakTime(s:String):String=runCatching{"ساعت "+LocalTime.parse(s).hour+" و "+LocalTime.parse(s).minute+" دقیقه"}.getOrDefault(s)
+private val spokenUnits=listOf("صفر","یک","دو","سه","چهار","پنج","شش","هفت","هشت","نه","ده","یازده","دوازده","سیزده","چهارده","پانزده","شانزده","هفده","هجده","نوزده")
+private fun spokenNumber(n:Int):String=when{n<20->spokenUnits[n.coerceAtLeast(0)];n<60->{val tens=listOf("","","بیست","سی","چهل","پنجاه")[n/10];if(n%10==0)tens else tens+" و "+spokenUnits[n%10]};else->n.toString()}
+internal fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت "+spokenNumber(t.hour)+" و "+spokenNumber(t.minute)+" دقیقه"}.getOrDefault(s)
 
 data class StudyItem(val id:String=UUID.randomUUID().toString(),val subject:String,val title:String,val date:String,val start:String,val end:String,val note:String="",val done:Boolean=false,val studied:Int=0) {
     val duration:Int get()=runCatching{Duration.between(LocalTime.parse(start),LocalTime.parse(end)).toMinutes().toInt()}.getOrDefault(0)
