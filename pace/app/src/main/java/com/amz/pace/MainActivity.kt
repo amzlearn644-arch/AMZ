@@ -187,25 +187,26 @@ class AnnounceService:Service(),TextToSpeech.OnInitListener{
 }
 private fun scheduleStart(c:Context,l:Lesson,date:String){
  val am=c.getSystemService(AlarmManager::class.java)
- val time=LocalTime.parse(l.start)
- var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
- if(at.toInstant().toEpochMilli()<=System.currentTimeMillis() || l.started>0 || l.finished>0) return
- val intent=Intent(c,StudyAlarmReceiver::class.java)
-  .putExtra("kind","start").putExtra("lesson",l.name).putExtra("clock",speakTime(l.start))
+ val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind","start").putExtra("lesson",l.name).putExtra("clock",speakTime(l.start))
  val pi=PendingIntent.getBroadcast(c,l.id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
- if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
- else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
+ val at=LocalDate.parse(date).atTime(LocalTime.parse(l.start)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+ if(at<=System.currentTimeMillis() || l.started>0 || l.finished>0){am.cancel(pi);pi.cancel();return}
+ if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
 }
 private fun scheduleEnd(c:Context,l:Lesson,date:String,planId:String){
  val am=c.getSystemService(AlarmManager::class.java)
- val time=LocalTime.parse(l.end)
- var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
- if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) return
- val intent=Intent(c,StudyAlarmReceiver::class.java)
-  .putExtra("kind","end").putExtra("lesson",l.name).putExtra("lessonId",l.id).putExtra("date",date).putExtra("planId",planId).putExtra("clock",speakTime(l.end))
+ val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind","end").putExtra("lesson",l.name).putExtra("lessonId",l.id).putExtra("date",date).putExtra("planId",planId).putExtra("clock",speakTime(l.end))
  val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+1,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
- if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
- else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
+ val at=LocalDate.parse(date).atTime(LocalTime.parse(l.end)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+ if(at<=System.currentTimeMillis()){am.cancel(pi);pi.cancel();return}
+ if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
+}
+private fun cancelLessonAlarms(c:Context,l:Lesson){
+ val am=c.getSystemService(AlarmManager::class.java)
+ listOf(l.id.hashCode(),l.id.hashCode()+1).forEach{request->
+  val pi=PendingIntent.getBroadcast(c,request,Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+  if(pi!=null){am.cancel(pi);pi.cancel()}
+ }
 }
 private fun hasAccess(c:Context):Boolean{
  val n=Build.VERSION.SDK_INT<33||ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED
@@ -241,7 +242,7 @@ private fun hasAccess(c:Context):Boolean{
  setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
- AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=plans.filterNot{it.id==plan.id};save(c,plans)})
+ AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plan.lessons.forEach{cancelLessonAlarms(c,it)};plans=plans.filterNot{it.id==plan.id};save(c,plans)})
  1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme){theme=it;pref.edit().putString("theme",it).apply()}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
