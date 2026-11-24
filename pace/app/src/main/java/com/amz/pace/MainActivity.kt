@@ -94,8 +94,8 @@ private fun jalali(d:LocalDate):String{
  val m=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
  return "${fa(jd.toString())} ${m[jm-1]} ${fa(jy.toString())}"
 }
-private internal data class JalaliParts(val year:Int,val month:Int,val day:Int)
-private internal fun jalaliParts(date:LocalDate):JalaliParts {
+internal data class JalaliParts(val year:Int,val month:Int,val day:Int)
+internal fun jalaliParts(date:LocalDate):JalaliParts {
     var gy = date.year - 1600
     val gm = date.monthValue - 1
     val gd = date.dayOfMonth - 1
@@ -112,7 +112,7 @@ private internal fun jalaliParts(date:LocalDate):JalaliParts {
     val jd = if (j < 186) 1 + j%31 else 1 + (j-186)%30
     return JalaliParts(jy,jm,jd)
 }
-private internal fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate {
+internal fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate {
     var jy = year - 979
     var days = 365*jy + (jy/33)*8 + ((jy%33+3)/4)
     days += if (month <= 6) (month-1)*31 else 186 + (month-7)*30
@@ -139,7 +139,7 @@ private internal fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate {
     while (gm < 12 && days >= monthDays[gm]) { days -= monthDays[gm]; gm++ }
     return LocalDate.of(gy,gm+1,days+1)
 }
-private internal fun jalaliMonthLength(year:Int,month:Int):Int =
+internal fun jalaliMonthLength(year:Int,month:Int):Int =
     if (month <= 6) 31 else if (month <= 11) 30 else {
         val last = jalaliToGregorian(year,12,30)
         if (jalaliParts(last).month == 12 && jalaliParts(last).day == 30) 30 else 29
@@ -152,7 +152,7 @@ private fun persianNumber(n:Int):String{
  val ten=n/10;val unit=n%10
  return if(unit==0)faTens[ten] else faTens[ten]+" و "+faUnits[unit]
 }
-private internal fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${persianNumber(t.hour)} و ${persianNumber(t.minute)} دقیقه"}.getOrDefault(s)
+internal fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${persianNumber(t.hour)} و ${persianNumber(t.minute)} دقیقه"}.getOrDefault(s)
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}};override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);recreate()}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
