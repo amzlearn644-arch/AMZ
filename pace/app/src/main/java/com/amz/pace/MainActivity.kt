@@ -14,6 +14,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -127,14 +131,27 @@ private fun hasAccess(c:Context):Boolean{
  var plans by remember{mutableStateOf(load(c))};var user by remember{mutableStateOf(pref.getString("user","")?:"")}
  var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")}
  var tick by remember{mutableIntStateOf(0)};LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(1000);tick++;plans=load(c)}}
+ var permissionRefresh by remember{mutableIntStateOf(0)}
+ LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(650);permissionRefresh++}}
+ val notificationGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<33 || ContextCompat.checkSelfPermission(c,Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)
+ val exactAlarmGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<31 || c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms())
+ val fullScreenGranted = permissionRefresh>=0 && (Build.VERSION.SDK_INT<34 || c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent())
+ val allPermissionsGranted = notificationGranted && exactAlarmGranted && fullScreenGranted
  var name by remember{mutableStateOf(user)};var setup by remember{mutableStateOf(user.isBlank())}
  val ask=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){}
  val bg=if(theme=="light")Color(0xFFF1F4F7) else ink;val fg=if(theme=="light")ink else paper;val card=if(theme=="light")Color.White else Color(0xFF1B2B43)
  MaterialTheme(colorScheme=darkColorScheme(primary=teal,background=bg,surface=card,onSurface=fg)){
  Surface(Modifier.fillMaxSize(),color=bg){
  when{
+ !allPermissionsGranted->Column(Modifier.fillMaxSize().padding(horizontal=22.dp, vertical=18.dp),verticalArrangement=Arrangement.Center){
+  Logo(76); Spacer(Modifier.height(18.dp)); Text("آماده‌سازی AMZ Pace",color=fg,fontSize=23.sp,fontWeight=FontWeight.Bold)
+  Text("برای اینکه یادآوری درس‌ها درست و به‌موقع کار کند، دسترسی‌های زیر را فعال کن.",color=muted); Spacer(Modifier.height(16.dp))
+  AccessRow("اعلان‌ها","برای نمایش یادآوری درس‌ها",notificationGranted){if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS)}
+  AccessRow("آلارم دقیق","برای اجرای یادآوری در ساعت تعیین‌شده",exactAlarmGranted){if(Build.VERSION.SDK_INT>=31)c.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+c.packageName)))}
+  AccessRow("نمایش تمام‌صفحه","برای نمایش هشدار مهم هنگام شروع درس",fullScreenGranted){if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:"+c.packageName)))}
+  Spacer(Modifier.height(12.dp)); Text("پس از بازگشت از تنظیمات، وضعیت هر دسترسی خودکار بررسی می‌شود.",color=muted,fontSize=12.sp)
+ }
  setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
- !hasAccess(c)->Column(Modifier.fillMaxSize().padding(22.dp),verticalArrangement=Arrangement.Center){Text("برای شروع باید دسترسی‌ها را فعال کنی",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("این مجوزها برای اعلان و زنگ دقیق درس‌ها استفاده می‌شوند.",color=muted);AccessRow("اعلان‌ها"){if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS)};AccessRow("آلارم دقیق"){if(Build.VERSION.SDK_INT>=31)c.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:${c.packageName}")))};AccessRow("نمایش تمام‌صفحه"){if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:${c.packageName}")))};Button(onClick={tick++}){Text("بررسی دوباره")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
  AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans)})
@@ -146,7 +163,15 @@ private fun hasAccess(c:Context):Boolean{
  }
 }
 @Composable private fun Logo(size:Int){Box(Modifier.size(size.dp).clip(RoundedCornerShape((size/3).dp)).background(ink),contentAlignment=Alignment.Center){Canvas(Modifier.fillMaxSize(.68f)){drawCircle(teal,style=Stroke(size.dp.toPx()*.09f));drawLine(paper,center,androidx.compose.ui.geometry.Offset(center.x,center.y*.52f),size.dp.toPx()*.08f,cap=StrokeCap.Round);drawLine(paper,center,androidx.compose.ui.geometry.Offset(center.x+size.dp.toPx()*.2f,center.y+size.dp.toPx()*.12f),size.dp.toPx()*.08f,cap=StrokeCap.Round)}}}
-@Composable private fun AccessRow(s:String,act:()->Unit){Card(Modifier.fillMaxWidth().padding(vertical=5.dp)){Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Text(s,Modifier.weight(1f));TextButton(onClick=act){Text("فعال‌سازی")}}}}
+@Composable private fun AccessRow(title:String,description:String,granted:Boolean,act:()->Unit){
+ Card(Modifier.fillMaxWidth().padding(vertical=5.dp).animateContentSize(),colors=CardDefaults.cardColors(containerColor=if(granted)Color(0xFF123B3A) else Color(0xFF1B2B43)),shape=RoundedCornerShape(16.dp)){
+  Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically){
+   Column(Modifier.weight(1f)){Text(title,color=Color(0xFFF4F1E8),fontWeight=FontWeight.SemiBold);Text(if(granted)"دسترسی فعال است" else description,color=if(granted)Color(0xFF72E6B5) else muted,fontSize=11.sp)}
+   AnimatedVisibility(visible=granted,enter=fadeIn()+scaleIn()){Icon(Icons.Default.CheckCircle,contentDescription="فعال",tint=Color(0xFF35D399),modifier=Modifier.size(30.dp))}
+   if(!granted)TextButton(onClick=act){Text("فعال‌سازی",color=teal)}
+  }
+ }
+}
 @Composable private fun Today(plans:List<Plan>,user:String,card:Color,fg:Color,onSave:(Plan)->Unit,onUpdate:(Plan)->Unit){
  val context=LocalContext.current
  var create by remember{mutableStateOf(false)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
