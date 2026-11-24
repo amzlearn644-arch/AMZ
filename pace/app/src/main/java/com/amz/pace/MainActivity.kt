@@ -157,14 +157,19 @@ internal fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"س
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}};override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);recreate()}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
-class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0L)scheduleEnd(c,l,p.date,p.id)else scheduleStart(c,l,p.date)}}}}}
+class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0L)scheduleEnd(c,l,p.date,p.id)else scheduleStart(c,l,p.date)}};runCatching{scheduleBreaks(c,p)}}}}
 class AnnounceService:Service(),TextToSpeech.OnInitListener{
  private var t:TextToSpeech?=null;private var msg=""
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
   val title=i?.getStringExtra("lesson")?:"درس";val kind=i?.getStringExtra("kind")?:"start";val name=getSharedPreferences(PREF,0).getString("user","دوست من")?:"دوست من"
   val clock=i?.getStringExtra("clock")?:"";val lang=getSharedPreferences(PREF,0).getString("speech","fa")
-  msg=if(kind=="end")"${name} خسته نباشی. ${clock}. زمان مطالعه ${title} تمام شد." else "${name}، ${clock}. برو درس ${title} را شروع کن."
-  if(lang=="en")msg=if(kind=="end")"${name}, well done. Study time for ${title} is over." else "${name}, it is time to start ${title}."
+  msg=when(kind){
+   "end"->"${name} خسته نباشی. ${clock}. زمان مطالعه ${title} تمام شد."
+   "break_start"->"${name}، ${clock}. زمان استراحت شروع شد."
+   "break_end"->"${name}، ${clock}. زمان استراحت تمام شد؛ برای درس بعدی آماده شو."
+   else->"${name}، ${clock}. برو درس ${title} را شروع کن."
+  }
+  if(lang=="en")msg=when(kind){"end"->"${name}, well done. Study time for ${title} is over.";"break_start"->"${name}, your break starts now.";"break_end"->"${name}, your break is over. Get ready for the next lesson.";else->"${name}, it is time to start ${title}."}
   val open=PendingIntent.getActivity(this,3,Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("kind",kind).putExtra("lessonId",i?.getStringExtra("lessonId")).putExtra("date",i?.getStringExtra("date")),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   val n=NotificationCompat.Builder(this,CH).setSmallIcon(R.drawable.ic_amz_pace).setContentTitle(if(kind=="end")"پایان درس" else "زمان شروع درس").setContentText(msg).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setContentIntent(open).setFullScreenIntent(open,true).build()
   startForeground(3,n);t=TextToSpeech(this,this);return START_NOT_STICKY
@@ -200,6 +205,28 @@ private fun scheduleEnd(c:Context,l:Lesson,date:String,planId:String){
  val at=LocalDate.parse(date).atTime(LocalTime.parse(l.end)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
  if(at<=System.currentTimeMillis()){am.cancel(pi);pi.cancel();return}
  if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
+}
+private fun scheduleBreakAlarm(c:Context,plan:Plan,kind:String,clock:String,requestCode:Int){
+ val am=c.getSystemService(AlarmManager::class.java)
+ val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("kind",kind).putExtra("lesson","استراحت").putExtra("clock",speakTime(clock)).putExtra("date",plan.date).putExtra("planId",plan.id)
+ val pi=PendingIntent.getBroadcast(c,requestCode,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+ val at=LocalDate.parse(plan.date).atTime(LocalTime.parse(clock)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+ if(at<=System.currentTimeMillis()){am.cancel(pi);pi.cancel();return}
+ if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi) else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
+}
+private fun scheduleBreaks(c:Context,plan:Plan){
+ studyBreaks(plan.lessons).forEachIndexed{index,gap->
+  val base=plan.id.hashCode()+10000+index*2
+  scheduleBreakAlarm(c,plan,"break_start",gap.start,base)
+  scheduleBreakAlarm(c,plan,"break_end",gap.end,base+1)
+ }
+}
+private fun cancelBreakAlarms(c:Context,plan:Plan){
+ val am=c.getSystemService(AlarmManager::class.java)
+ repeat(studyBreaks(plan.lessons).size*2){offset->
+  val pi=PendingIntent.getBroadcast(c,plan.id.hashCode()+10000+offset,Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+  if(pi!=null){am.cancel(pi);pi.cancel()}
+ }
 }
 private fun cancelLessonAlarms(c:Context,l:Lesson){
  val am=c.getSystemService(AlarmManager::class.java)
@@ -242,7 +269,7 @@ private fun hasAccess(c:Context):Boolean{
  setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
- AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{lesson->cancelLessonAlarms(c,lesson);if(lesson.started>0&&lesson.finished==0L)scheduleEnd(c,lesson,plan.date,plan.id)else scheduleStart(c,lesson,plan.date)}},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plan.lessons.forEach{cancelLessonAlarms(c,it)};plans=plans.filterNot{it.id==plan.id};save(c,plans)})
+ AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{lesson->cancelLessonAlarms(c,lesson);if(lesson.started>0&&lesson.finished==0L)scheduleEnd(c,lesson,plan.date,plan.id)else scheduleStart(c,lesson,plan.date)};cancelBreakAlarms(c,plan);scheduleBreaks(c,plan)},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)};scheduleBreaks(c,plan)},{plan->plan.lessons.forEach{cancelLessonAlarms(c,it)};cancelBreakAlarms(c,plan);plans=plans.filterNot{it.id==plan.id};save(c,plans)})
  1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme){theme=it;pref.edit().putString("theme",it).apply()}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
