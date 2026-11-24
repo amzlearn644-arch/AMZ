@@ -245,34 +245,181 @@ class MainActivity:ComponentActivity(){
     }
 }
 
-@Composable private fun Analytics(w:Workspace,card:Color,fg:Color,soft:Color){
-    val now=LocalDate.now();val days=(6 downTo 0).map{now.minusDays(it.toLong())}
-    val values=days.map{d->w.focus.filter{it.date==d.toString()}.sumOf{it.minutes}}
-    val tests=w.tests.filter{it.date>=now.minusDays(6).toString()}
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(13.dp)){
-        item{Text("تحلیل هفتگی",color=fg,fontSize=19.sp,fontWeight=FontWeight.Bold);Text("بر اساس داده‌های ثبت‌شده در برنامه",color=soft,fontSize=11.sp)}
-        item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){MiniMetric("مطالعه",formatMinutes(values.sum()),Icons.Default.Timer,ACCENT,card,fg,Modifier.weight(1f));MiniMetric("تست",tests.sumOf{it.total}.toString(),Icons.Default.Quiz,GOLD,card,fg,Modifier.weight(1f));MiniMetric("میانگین درصد",(if(tests.isEmpty())0 else tests.map{it.percent}.average().roundToInt()).toString()+"٪",Icons.Default.TrendingUp,BLUE,card,fg,Modifier.weight(1f))}}
-        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Text("نمودار زمان مطالعه",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Spacer(Modifier.height(14.dp));val max=values.maxOrNull()?.coerceAtLeast(60)?:60;Row(Modifier.fillMaxWidth().height(150.dp),horizontalArrangement=Arrangement.SpaceEvenly,verticalAlignment=Alignment.Bottom){values.forEachIndexed{i,v->Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Bottom){Text(if(v>0)v.toString() else "",color=soft,fontSize=9.sp);Box(Modifier.width(19.dp).height((v.toFloat()/max*105).coerceAtLeast(4f).dp).clip(RoundedCornerShape(topStart=6.dp,topEnd=6.dp)).background(if(i==6)ACCENT else BLUE.copy(alpha=.65f)));Text(listOf("ش","ی","د","س","چ","پ","ج")[days[i].dayOfWeek.value%7],color=soft,fontSize=10.sp,modifier=Modifier.padding(top=5.dp))}}}}}
-        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Text("تحلیل آزمون‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);if(tests.isEmpty())Text("هنوز آزمونی ثبت نشده است.",color=soft);tests.sortedByDescending{it.date}.forEach{t->Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(t.subject+" · "+t.title,color=fg,fontWeight=FontWeight.SemiBold);Text(t.date+" · "+t.correct+" صحیح / "+t.wrong+" غلط / "+t.blank+" نزده",color=soft,fontSize=10.sp)};Text(t.percent.toString()+"٪",color=ACCENT,fontWeight=FontWeight.Bold,fontSize=18.sp)};HorizontalDivider(color=soft.copy(alpha=.15f))}}}}
-        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Text("مقایسه درس‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);val subjects=(w.items.map{it.subject}+w.tests.map{it.subject}).distinct();if(subjects.isEmpty())Text("با ثبت مطالعه و آزمون، تحلیل درس‌ها نمایش داده می‌شود.",color=soft);subjects.forEach{s->val mins=w.focus.filter{it.subject==s}.sumOf{it.minutes};val ts=w.tests.filter{it.subject==s};Row(Modifier.fillMaxWidth().padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(s,color=fg,fontWeight=FontWeight.SemiBold);Text(formatMinutes(mins)+" مطالعه · "+ts.size+" آزمون",color=soft,fontSize=10.sp)};Text(if(ts.isEmpty())"—" else ts.map{it.percent}.average().roundToInt().toString()+"٪",color=ACCENT,fontWeight=FontWeight.Bold)}}}}}
+@Composable
+private fun Analytics(w: Workspace, card: Color, fg: Color, soft: Color) {
+    val today = LocalDate.now()
+    val days = (6 downTo 0).map { today.minusDays(it.toLong()) }
+    val values = days.map { d -> w.focus.filter { it.date == d.toString() }.sumOf { it.minutes } }
+    val recentTests = w.tests.filter { it.date >= today.minusDays(6).toString() }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(18.dp),
+        verticalArrangement = Arrangement.spacedBy(13.dp)
+    ) {
+        item {
+            Column {
+                Text("تحلیل هفتگی", color = fg, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("بر اساس داده‌های ثبت‌شده در برنامه", color = soft, fontSize = 11.sp)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MiniMetric("مطالعه", formatMinutes(values.sum()), Icons.Default.Timer, ACCENT, card, fg, Modifier.weight(1f))
+                MiniMetric("تست", recentTests.sumOf { it.total }.toString(), Icons.Default.Quiz, GOLD, card, fg, Modifier.weight(1f))
+                val average = if (recentTests.isEmpty()) 0 else recentTests.map { it.percent }.average().roundToInt()
+                MiniMetric("میانگین درصد", average.toString() + "٪", Icons.Default.TrendingUp, BLUE, card, fg, Modifier.weight(1f))
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = card), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("نمودار زمان مطالعه", color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(14.dp))
+                    val maxValue = (values.maxOrNull() ?: 60).coerceAtLeast(60)
+                    Row(
+                        Modifier.fillMaxWidth().height(150.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        values.forEachIndexed { index, value ->
+                            Column(
+                                Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom
+                            ) {
+                                Text(if (value > 0) value.toString() else "", color = soft, fontSize = 9.sp)
+                                Box(
+                                    Modifier.width(19.dp)
+                                        .height((value.toFloat() / maxValue * 105).coerceAtLeast(4f).dp)
+                                        .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                        .background(if (index == 6) ACCENT else BLUE.copy(alpha = .65f))
+                                )
+                                Text(
+                                    listOf("ش", "ی", "د", "س", "چ", "پ", "ج")[days[index].dayOfWeek.value % 7],
+                                    color = soft, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = card), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("تحلیل آزمون‌ها", color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    if (recentTests.isEmpty()) Text("هنوز آزمونی ثبت نشده است.", color = soft)
+                    recentTests.sortedByDescending { it.date }.forEach { result ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(result.subject + " · " + result.title, color = fg, fontWeight = FontWeight.SemiBold)
+                                Text(result.date + " · " + result.correct + " صحیح / " + result.wrong + " غلط / " + result.blank + " نزده", color = soft, fontSize = 10.sp)
+                            }
+                            Text(result.percent.toString() + "٪", color = ACCENT, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        }
+                        HorizontalDivider(color = soft.copy(alpha = .15f))
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = card), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("مقایسه درس‌ها", color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    val subjects = (w.items.map { it.subject } + w.tests.map { it.subject }).distinct()
+                    if (subjects.isEmpty()) Text("با ثبت مطالعه و آزمون، تحلیل درس‌ها نمایش داده می‌شود.", color = soft)
+                    subjects.forEach { subject ->
+                        val minutes = w.focus.filter { it.subject == subject }.sumOf { it.minutes }
+                        val subjectTests = w.tests.filter { it.subject == subject }
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(subject, color = fg, fontWeight = FontWeight.SemiBold)
+                                Text(formatMinutes(minutes) + " مطالعه · " + subjectTests.size + " آزمون", color = soft, fontSize = 10.sp)
+                            }
+                            val score = if (subjectTests.isEmpty()) "—" else subjectTests.map { it.percent }.average().roundToInt().toString() + "٪"
+                            Text(score, color = ACCENT, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-@Composable private fun CalendarScreen(w:Workspace,selected:String,onSelect:(String)->Unit,card:Color,fg:Color,soft:Color){
-    var month by remember{mutableStateOf(YearMonth.now())}
-    val first=month.atDay(1);val blanks=first.dayOfWeek%7
-    val dates=(0 until blanks).map{null}+(1..month.lengthOfMonth()).map{month.atDay(it)}
-    val chosen=runCatching{LocalDate.parse(selected)}.getOrDefault(LocalDate.now())
-    Column(Modifier.fillMaxSize().padding(17.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-        Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(21.dp)){Column(Modifier.padding(14.dp)){
-            Row(verticalAlignment=Alignment.CenterVertically){IconButton(onClick={month=month.minusMonths(1)}){Icon(Icons.Default.ChevronRight,null,tint=fg)};Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){val jp=jalaliParts(month.atDay(1));Text(jalaliMonthName(jp.month)+" "+jp.year,color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text("تقویم فعالیت‌ها",color=soft,fontSize=10.sp)};IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronLeft,null,tint=fg)}}
-            Row(Modifier.fillMaxWidth()){listOf("ش","ی","د","س","چ","پ","ج").forEach{Text(it,Modifier.weight(1f),color=soft,textAlign=TextAlign.Center,fontSize=11.sp)}}
-            dates.chunked(7).forEach{row->Row(Modifier.fillMaxWidth()){row.forEach{d->Box(Modifier.weight(1f).aspectRatio(1f).padding(3.dp).clip(RoundedCornerShape(9.dp)).background(if(d==chosen)ACCENT else if(d==LocalDate.now())BLUE.copy(alpha=.2f) else Color.Transparent).clickable(enabled=d!=null){d?.let{onSelect(it.toString())}},contentAlignment=Alignment.Center){if(d!=null)Column(horizontalAlignment=Alignment.CenterHorizontally){Text(jalaliParts(d).day.toString(),color=if(d==chosen)BG else fg,fontWeight=FontWeight.Bold);if(w.items.any{it.date==d.toString()})Box(Modifier.size(4.dp).clip(CircleShape).background(if(d==chosen)BG else ACCENT))}}}}}
-        }}
-        Text("سوابق "+jalali(chosen),color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold)
-        val list=w.items.filter{it.date==selected}.sortedBy{it.start}
-        if(list.isEmpty())Empty("داده‌ای برای این روز نیست","روز دیگری را انتخاب کن یا برنامه‌ای ثبت کن.",Icons.Default.EventBusy)
-        else LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(list,key={it.id}){it->Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(card).padding(13.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(it.subject+" · "+it.title,color=fg,fontWeight=FontWeight.SemiBold);Text(it.start+" – "+it.end,color=soft,fontSize=11.sp)};Text(if(it.done)"انجام شد" else "برنامه",color=if(it.done)ACCENT else GOLD,fontSize=11.sp)}}}
+@Composable
+private fun CalendarScreen(w: Workspace, selected: String, onSelect: (String) -> Unit, card: Color, fg: Color, soft: Color) {
+    var month by remember { mutableStateOf(YearMonth.now()) }
+    val first = month.atDay(1)
+    val blanks = first.dayOfWeek.value % 7
+    val dates: List<LocalDate?> = (0 until blanks).map { null } + (1..month.lengthOfMonth()).map { month.atDay(it) }
+    val chosen = runCatching { LocalDate.parse(selected) }.getOrDefault(LocalDate.now())
+    Column(Modifier.fillMaxSize().padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = card), shape = RoundedCornerShape(21.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { month = month.minusMonths(1) }) { Icon(Icons.Default.ChevronRight, null, tint = fg) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        val jp = jalaliParts(month.atDay(1))
+                        Text(jalaliMonthName(jp.month) + " " + jp.year, color = fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("تقویم فعالیت‌ها", color = soft, fontSize = 10.sp)
+                    }
+                    IconButton(onClick = { month = month.plusMonths(1) }) { Icon(Icons.Default.ChevronLeft, null, tint = fg) }
+                }
+                Row(Modifier.fillMaxWidth()) {
+                    listOf("ش", "ی", "د", "س", "چ", "پ", "ج").forEach {
+                        Text(it, Modifier.weight(1f), color = soft, textAlign = TextAlign.Center, fontSize = 11.sp)
+                    }
+                }
+                dates.chunked(7).forEach { week ->
+                    Row(Modifier.fillMaxWidth()) {
+                        week.forEach { day ->
+                            Box(
+                                Modifier.weight(1f).aspectRatio(1f).padding(3.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(if (day == chosen) ACCENT else if (day == LocalDate.now()) BLUE.copy(alpha = .2f) else Color.Transparent)
+                                    .clickable(enabled = day != null) { day?.let { onSelect(it.toString()) } },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (day != null) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(jalaliParts(day).day.toString(), color = if (day == chosen) BG else fg, fontWeight = FontWeight.Bold)
+                                        if (w.items.any { it.date == day.toString() }) {
+                                            Box(Modifier.size(4.dp).clip(CircleShape).background(if (day == chosen) BG else ACCENT))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Text("سوابق " + jalali(chosen), color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        val list = w.items.filter { it.date == selected }.sortedBy { it.start }
+        if (list.isEmpty()) {
+            Empty("داده‌ای برای این روز نیست", "روز دیگری را انتخاب کن یا برنامه‌ای ثبت کن.", Icons.Default.EventBusy)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(list, key = { it.id }) { item ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(card).padding(13.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.subject + " · " + item.title, color = fg, fontWeight = FontWeight.SemiBold)
+                            Text(item.start + " – " + item.end, color = soft, fontSize = 11.sp)
+                        }
+                        Text(if (item.done) "انجام شد" else "برنامه", color = if (item.done) ACCENT else GOLD, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
     }
 }
 
