@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -177,7 +178,7 @@ class MainActivity:ComponentActivity(){
                 AnimatedContent(page,label="pages",modifier=Modifier.padding(padding)){p->
                     when(p){
                         0->Dashboard(data,active,elapsed,card,fg,soft,onPlan={page=1},onFocus={page=2},onAdd={page=1;editor=null;showEditor=true},onDone={item->commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(done=!it.done)else it}))})
-                        1->Planner(data,date,card,fg,soft,onDate={date=it},onEdit={editor=it;showEditor=true},onDone={item->commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(done=!it.done)else it}))},onDelete={item->cancelStudyAlarm(c,item.id);commit(data.copy(items=data.items.filterNot{it.id==item.id}))},onAlarm={item->scheduleStudyAlarm(c,item);message="یادآوری جلسه تنظیم شد"},onAdd={editor=null;showEditor=true})
+                        1->Planner(data,date,card,fg,soft,onDate={date=it},onEdit={editor=it;showEditor=true},onDone={item->commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(done=!it.done)else it}))},onDelete={item->cancelStudyAlarm(c,item.id);commit(data.copy(items=data.items.filterNot{it.id==item.id}))},onAlarm={item->if(scheduleStudyAlarm(c,item))message="یادآوری جلسه تنظیم شد" else {runCatching{c.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+c.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))};message="برای تنظیم زنگ، مجوز هشدار دقیق را فعال کن"}},onAdd={editor=null;showEditor=true})
                         2->Focus(active,elapsed,data,card,fg,soft,onStart={item->commit(data.copy(activeId=item.id,activeSince=System.currentTimeMillis(),elapsed=0))},onPause={commit(data.copy(activeSince=0,elapsed=elapsed))},onStop={item->val mins=(elapsed/60000).toInt();commit(data.copy(items=data.items.map{if(it.id==item.id)it.copy(studied=it.studied+mins,done=true)else it},focus=data.focus+FocusRecord(item.subject,item.title,LocalDate.now().toString(),mins),activeId="",activeSince=0,elapsed=0));message="جلسه ثبت شد: "+mins+" دقیقه"},onChoose={page=1})
                         3->Analytics(data,card,fg,soft)
                         4->CalendarScreen(data,date,{date=it;page=1},card,fg,soft)
@@ -278,7 +279,7 @@ class MainActivity:ComponentActivity(){
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("ظاهر برنامه",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("حالت تاریک",color=fg,modifier=Modifier.weight(1f));Switch(dark,onTheme)}}}}
         item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("هدف روزانه مطالعه",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("هدف را بر اساس دقیقه تنظیم کن.",color=soft,fontSize=11.sp);OutlinedTextField(goal,{goal=it},label={Text("دقیقه در روز")},singleLine=true);Button(onClick={val n=goal.toIntOrNull();if(n!=null&&n in 15..1440){onGoal(n);onMessage("هدف روزانه ذخیره شد")}else onMessage("عدد باید بین ۱۵ تا ۱۴۴۰ باشد")},colors=ButtonDefaults.buttonColors(containerColor=ACCENT,contentColor=BG)){Text("ذخیره هدف")}}}}
-        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("یادآوری‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("برای هشدار دقیق، مجوز اعلان و هشدار دقیق اندروید باید فعال باشد.",color=soft,fontSize=12.sp);Button(onClick={onMessage("از تنظیمات اندروید، اعلان‌ها و مجوز هشدار دقیق AMZ Pace را فعال کن.")},colors=ButtonDefaults.buttonColors(containerColor=BLUE,contentColor=BG)){Icon(Icons.Default.NotificationsActive,null);Text("راهنمای فعال‌سازی")}}}}
+        item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("یادآوری‌ها",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("برای هشدار دقیق، مجوز اعلان و هشدار دقیق اندروید باید فعال باشد.",color=soft,fontSize=12.sp);Button(onClick={val context=LocalContext.current;runCatching{context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+context.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))}},colors=ButtonDefaults.buttonColors(containerColor=BLUE,contentColor=BG)){Icon(Icons.Default.NotificationsActive,null);Text("باز کردن تنظیمات مجوزها")}}}}
         item{Card(colors=CardDefaults.cardColors(containerColor=card),shape=RoundedCornerShape(19.dp)){Column(Modifier.padding(16.dp)){Text("درباره AMZ Pace",color=fg,fontSize=17.sp,fontWeight=FontWeight.Bold);Text("نسخه بازطراحی‌شده مدیریت مطالعه",color=soft,fontSize=12.sp);Text("برنامه‌ریزی · تمرکز · تحلیل · آزمون",color=ACCENT,fontSize=13.sp);Spacer(Modifier.height(8.dp));Text("ساخته شده توسط امین",color=soft,fontSize=11.sp)}}}
     }
 }
@@ -322,11 +323,11 @@ private fun clock(ms:Long):String{val s=(ms/1000).coerceAtLeast(0);return "%02d:
 private fun jalali(d:LocalDate):String{val p=jalaliParts(d);return p.day.toString()+" "+jalaliMonthName(p.month)+" "+p.year}
 private fun jalaliMonthName(m:Int)=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند").getOrElse(m-1){"ماه"}
 private fun ensureChannel(c:Context){if(Build.VERSION.SDK_INT>=26){val ch=NotificationChannel(CHANNEL,"هشدارهای مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی و دیداری جلسه‌های مطالعه";enableVibration(true)};c.getSystemService(NotificationManager::class.java).createNotificationChannel(ch)}}
-private fun scheduleStudyAlarm(c:Context,item:StudyItem){
-    val at=runCatching{LocalDate.parse(item.date).atTime(LocalTime.parse(item.start)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()}.getOrDefault(0L);if(at<=System.currentTimeMillis())return
+private fun scheduleStudyAlarm(c:Context,item:StudyItem):Boolean{
+    val at=runCatching{LocalDate.parse(item.date).atTime(LocalTime.parse(item.start)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()}.getOrDefault(0L);if(at<=System.currentTimeMillis())return false
     val intent=Intent(c,StudyAlarmReceiver::class.java).putExtra("subject",item.subject).putExtra("title",item.title).putExtra("start",item.start)
     val pi=PendingIntent.getBroadcast(c,item.id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-    val am=c.getSystemService(AlarmManager::class.java);if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi)else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)
+    val am=c.getSystemService(AlarmManager::class.java);return runCatching{if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,pi)else am.setExact(AlarmManager.RTC_WAKEUP,at,pi)}.isSuccess
 }
 private fun cancelStudyAlarm(c:Context,id:String){val pi=PendingIntent.getBroadcast(c,id.hashCode(),Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE);if(pi!=null){c.getSystemService(AlarmManager::class.java).cancel(pi);pi.cancel()}}
 class StudyAlarmReceiver:BroadcastReceiver(){
