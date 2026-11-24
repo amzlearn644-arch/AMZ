@@ -144,7 +144,8 @@ private fun hasAccess(c:Context):Boolean{
  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(l.name,color=fg,fontWeight=FontWeight.Bold);Text(l.topic,color=muted,fontSize=12.sp)};Text("${fa(l.start)}–${fa(l.end)}",color=teal)}
  when{l.finished>0->Text("تمام شد · ${l.actual} دقیقه · ${l.tests} تست",color=teal)
  l.started>0->Button(onClick={finish=l;yes=false;count="0"},modifier=Modifier.fillMaxWidth()){Text("پایان درس و ثبت تست")}
- else->Button(onClick={onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=System.currentTimeMillis()) else it}))},modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}}
+ LocalTime.now()>=LocalTime.parse(l.start)->Button(onClick={onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=System.currentTimeMillis()) else it}))},modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
+ else->Text("شروع این درس ساعت "+fa(l.start)+" فعال می‌شود",color=muted,fontSize=12.sp)}
  }}}
  if(p.lessons.all{it.finished>0})item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(16.dp)){val delta=p.minutes-p.target;Text("تحلیل امروز",color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text(if(delta>=0)"به هدف رسیدی؛ ${delta} دقیقه بیشتر!" else "${-delta} دقیقه تا هدف فاصله داشتی.",color=teal);Text("مجموع تست: ${p.tests}",color=fg);p.lessons.forEach{Text("${it.name}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)};Bars(p.lessons.map{it.name to it.actual.toFloat()},teal)}}}
  }
@@ -166,7 +167,7 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
 @Composable private fun CalendarView(plans:List<Plan>,card:Color,fg:Color){
  var month by remember{mutableStateOf(LocalDate.now().withDayOfMonth(1))};var selected by remember{mutableStateOf(LocalDate.now())};val p=plans.firstOrNull{it.date==selected.toString()}
  Column(Modifier.fillMaxSize().padding(16.dp)){Row(verticalAlignment=Alignment.CenterVertically){Text("تقویم شمسی",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));IconButton(onClick={month=month.minusMonths(1)}){Icon(Icons.Default.ChevronLeft,null,tint=fg)};IconButton(onClick={month=month.plusMonths(1)}){Icon(Icons.Default.ChevronRight,null,tint=fg)}};Text(jalali(month),color=teal)
- val offset=month.dayOfWeek.value%7
+ val offset=(month.dayOfWeek.value+1)%7
  Row{listOf("ش","ی","د","س","چ","پ","ج").forEach{Text(it,Modifier.weight(1f),color=muted,textAlign=TextAlign.Center)}}
  for(w in 0..5)Row{for(col in 0..6){val day=w*7+col-offset+1;Box(Modifier.weight(1f).aspectRatio(1f).padding(2.dp).clip(RoundedCornerShape(8.dp)).background(if(day in 1..month.lengthOfMonth()&&selected.dayOfMonth==day&&selected.month==month.month)teal else card).clickable(day in 1..month.lengthOfMonth()){selected=month.withDayOfMonth(day)},contentAlignment=Alignment.Center){if(day in 1..month.lengthOfMonth())Column(horizontalAlignment=Alignment.CenterHorizontally){Text(fa(jalali(month.withDayOfMonth(day)).substringBefore(" ")),color=if(selected.dayOfMonth==day&&selected.month==month.month)ink else fg);if(plans.any{it.date==month.withDayOfMonth(day).toString()})Box(Modifier.size(4.dp).background(teal,CircleShape))}}}}
  Card(Modifier.fillMaxWidth().weight(1f)){Column(Modifier.padding(14.dp)){Text(jalali(selected),color=fg,fontWeight=FontWeight.Bold);if(p==null)Text("گزارشی برای این روز نیست.",color=muted)else{Text("${p.minutes} دقیقه مطالعه · ${p.tests} تست",color=teal);p.lessons.forEach{Text("${it.name} — ${it.topic}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)}}}}
