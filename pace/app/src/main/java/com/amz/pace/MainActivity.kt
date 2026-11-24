@@ -7,7 +7,7 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.*
-import android.provider.Settings
+import android.provider.Settings as AndroidSettings
 import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -106,7 +106,7 @@ private fun hasAccess(c:Context):Boolean{
  val f=Build.VERSION.SDK_INT<34||c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
  return n&&a&&f
 }
-@Composable private fun PaceAppContent(){
+@Composable fun PaceAppContent(){
  val c=LocalContext.current;val pref=c.getSharedPreferences(PREF,0)
  var plans by remember{mutableStateOf(load(c))};var user by remember{mutableStateOf(pref.getString("user","")?:"")}
  var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")}
@@ -118,7 +118,7 @@ private fun hasAccess(c:Context):Boolean{
  Surface(Modifier.fillMaxSize(),color=bg){
  when{
  setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
- !hasAccess(c)->Column(Modifier.fillMaxSize().padding(22.dp),verticalArrangement=Arrangement.Center){Text("برای شروع باید دسترسی‌ها را فعال کنی",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("این مجوزها برای اعلان و زنگ دقیق درس‌ها استفاده می‌شوند.",color=muted);AccessRow("اعلان‌ها"){if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS)};AccessRow("آلارم دقیق"){if(Build.VERSION.SDK_INT>=31)c.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:${c.packageName}")))};AccessRow("نمایش تمام‌صفحه"){if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:${c.packageName}")))};Button(onClick={tick++}){Text("بررسی دوباره")}}
+ !hasAccess(c)->Column(Modifier.fillMaxSize().padding(22.dp),verticalArrangement=Arrangement.Center){Text("برای شروع باید دسترسی‌ها را فعال کنی",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("این مجوزها برای اعلان و زنگ دقیق درس‌ها استفاده می‌شوند.",color=muted);AccessRow("اعلان‌ها"){if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS)};AccessRow("آلارم دقیق"){if(Build.VERSION.SDK_INT>=31)c.startActivity(Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:${c.packageName}")))};AccessRow("نمایش تمام‌صفحه"){if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:${c.packageName}")))};Button(onClick={tick++}){Text("بررسی دوباره")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
  AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans);plan.lessons.forEach{schedule(c,it)}},{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans)})
@@ -153,9 +153,99 @@ private fun hasAccess(c:Context):Boolean{
  if(create)CreateDialog(p,{create=false},onSave)
  if(finish!=null&&p!=null)AlertDialog(onDismissRequest={finish=null},title={Text("تست این درس را زدی؟")},text={Column{Row{FilterChip(yes,{yes=true},label={Text("بله")});Spacer(Modifier.width(8.dp));FilterChip(!yes,{yes=false},label={Text("خیر")})};if(yes)OutlinedTextField(count,{count=it.filter(Char::isDigit)},label={Text("تعداد تست")})}},confirmButton={TextButton(onClick={val l=finish!!;onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(finished=System.currentTimeMillis(),tests=if(yes)count.toIntOrNull()?:0 else 0)else it},closed=p.lessons.all{it.id==l.id||it.finished>0}));finish=null}){Text("ثبت")}})
 }
-@Composable private fun CreateDialog(old:Plan?,close:()->Unit,savePlan:(Plan)->Unit){
- val c=LocalContext.current;var target by remember{mutableStateOf((old?.target?:240).toString())};var lessons by remember{mutableStateOf(old?.lessons?:listOf(Lesson(name="",topic="",start="09:00",end="10:00")))};var error by remember{mutableStateOf("")}
- AlertDialog(onDismissRequest=close,title={Text("ساخت برنامه")},text={Column(Modifier.heightIn(max=520.dp)){OutlinedTextField(target,{target=it.filter(Char::isDigit)},label={Text("هدف مطالعه به دقیقه")});LazyColumn{items(lessons,key={it.id}){l->Card(Modifier.padding(vertical=4.dp)){Column(Modifier.padding(8.dp)){OutlinedTextField(l.name,{v->lessons=lessons.map{if(it.id==l.id)it.copy(name=v)else it}},label={Text("نام درس")});OutlinedTextField(l.topic,{v->lessons=lessons.map{if(it.id==l.id)it.copy(topic=v)else it}},label={Text("موضوع")});Row{TextButton(onClick={chooseTime(c,l.start){v->lessons=lessons.map{if(it.id==l.id)it.copy(start=v)else it}}}){Text("شروع ${l.start}")};TextButton(onClick={chooseTime(c,l.end){v->lessons=lessons.map{if(it.id==l.id)it.copy(end=v)else it}}}){Text("پایان ${l.end}")};IconButton(onClick={if(lessons.size>1)lessons=lessons.filterNot{it.id==l.id}}){Icon(Icons.Default.Delete,null)}}}}};TextButton(onClick={lessons=lessons+Lesson(name="",topic="",start="10:15",end="11:15")}){Text("+ افزودن درس")};Text(error,color=MaterialTheme.colorScheme.error)}},confirmButton={TextButton(onClick={val sorted=lessons.sortedBy{it.start};val ok=target.toIntOrNull()?.let{it>0}==true&&sorted.all{it.name.isNotBlank()&&it.topic.isNotBlank()&&it.planned>0}&&sorted.zipWithNext().all{LocalTime.parse(it.first.end)<=LocalTime.parse(it.second.start)};if(ok)savePlan(Plan(old?.date?:LocalDate.now().toString(),target.toInt(),sorted))else error="اطلاعات درس‌ها و تداخل ساعت‌ها را بررسی کن."}){Text("ذخیره")}},dismissButton={TextButton(onClick=close){Text("انصراف")}})
+@Composable
+private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit) {
+    val context = LocalContext.current
+    var target by remember { mutableStateOf((old?.target ?: 240).toString()) }
+    var lessons by remember {
+        mutableStateOf(old?.lessons ?: listOf(Lesson(name = "", topic = "", start = "09:00", end = "10:00")))
+    }
+    var error by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text("ساخت برنامه") },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp)) {
+                OutlinedTextField(
+                    value = target,
+                    onValueChange = { target = it.filter(Char::isDigit) },
+                    label = { Text("هدف مطالعه به دقیقه") },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(Modifier.weight(1f, fill = false)) {
+                    items(lessons, key = { it.id }) { lesson ->
+                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Column(Modifier.padding(8.dp)) {
+                                OutlinedTextField(
+                                    value = lesson.name,
+                                    onValueChange = { value ->
+                                        lessons = lessons.map { if (it.id == lesson.id) it.copy(name = value) else it }
+                                    },
+                                    label = { Text("نام درس") },
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = lesson.topic,
+                                    onValueChange = { value ->
+                                        lessons = lessons.map { if (it.id == lesson.id) it.copy(topic = value) else it }
+                                    },
+                                    label = { Text("موضوع") },
+                                    singleLine = true
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(onClick = {
+                                        chooseTime(context, lesson.start) { value ->
+                                            lessons = lessons.map { if (it.id == lesson.id) it.copy(start = value) else it }
+                                        }
+                                    }) { Text("شروع ${lesson.start}") }
+                                    TextButton(onClick = {
+                                        chooseTime(context, lesson.end) { value ->
+                                            lessons = lessons.map { if (it.id == lesson.id) it.copy(end = value) else it }
+                                        }
+                                    }) { Text("پایان ${lesson.end}") }
+                                    Spacer(Modifier.weight(1f))
+                                    IconButton(onClick = {
+                                        if (lessons.size > 1) lessons = lessons.filterNot { it.id == lesson.id }
+                                    }) { Icon(Icons.Default.Delete, contentDescription = "حذف درس") }
+                                }
+                            }
+                        }
+                    }
+                }
+                TextButton(onClick = {
+                    lessons = lessons + Lesson(name = "", topic = "", start = "10:15", end = "11:15")
+                }) { Text("+ افزودن درس") }
+                if (error.isNotBlank()) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val sorted = lessons.sortedBy { it.start }
+                val targetValue = target.toIntOrNull()
+                val validTimes = sorted.all { lesson ->
+                    runCatching {
+                        val startTime = LocalTime.parse(lesson.start)
+                        val endTime = LocalTime.parse(lesson.end)
+                        lesson.name.isNotBlank() && lesson.topic.isNotBlank() && endTime.isAfter(startTime)
+                    }.getOrDefault(false)
+                }
+                val noOverlap = sorted.zipWithNext().all { (first, second) ->
+                    runCatching { !LocalTime.parse(first.end).isAfter(LocalTime.parse(second.start)) }.getOrDefault(false)
+                }
+                if (targetValue != null && targetValue > 0 && validTimes && noOverlap) {
+                    savePlan(Plan(date = old?.date ?: LocalDate.now().toString(), target = targetValue, lessons = sorted))
+                    close()
+                } else {
+                    error = "نام و موضوع درس، ساعت‌ها، هدف و نبود تداخل را بررسی کن."
+                }
+            }) { Text("ذخیره") }
+        },
+        dismissButton = { TextButton(onClick = close) { Text("انصراف") } }
+    )
 }
 private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCatching{LocalTime.parse(initial)}.getOrDefault(LocalTime.NOON);TimePickerDialog(c,{_,h,m->done("%02d:%02d".format(h,m))},t.hour,t.minute,true).show()}
 @Composable private fun Bars(data:List<Pair<String,Float>>,color:Color){if(data.isEmpty())Text("داده‌ای ثبت نشده",color=muted)else{val max=data.maxOf{it.second}.coerceAtLeast(1f);data.forEach{(n,v)->Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.padding(vertical=4.dp)){Text(n,color=muted,modifier=Modifier.width(65.dp),fontSize=11.sp);Box(Modifier.weight(1f).height(8.dp).clip(CircleShape).background(color.copy(alpha=.16f))){Box(Modifier.fillMaxWidth((v/max).coerceIn(0f,1f)).fillMaxHeight().background(color))};Text(v.toInt().toString(),color=muted,modifier=Modifier.width(28.dp),textAlign=TextAlign.End,fontSize=11.sp)}}}}
