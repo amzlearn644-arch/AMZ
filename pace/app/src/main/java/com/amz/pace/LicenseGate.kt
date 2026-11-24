@@ -30,7 +30,8 @@ private fun deviceFingerprint(c:Context):String {
  val hash=MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
  return hash.joinToString("") { "%02X".format(it) }
 }
-private fun validateLicense(code:String,device:String):Boolean {\n return try {
+private fun validateLicense(code:String,device:String):Boolean {
+ return try {
  val p=code.trim().split(".")
  if(p.size!=3||p[0]!="AMZP1") return false
  val payload=Base64.decode(p[1],Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -43,6 +44,7 @@ private fun validateLicense(code:String,device:String):Boolean {\n return try {
  verifier.update(payload,0,payload.size)
  verifier.verifySignature(signature)
 } catch(_:Throwable){false}
+}
 @Composable fun PaceApp(){
  val c= androidx.compose.ui.platform.LocalContext.current
  var activation by remember { mutableStateOf(c.getSharedPreferences(LICENSE_PREF,0).getString("license","") ?: "") }
