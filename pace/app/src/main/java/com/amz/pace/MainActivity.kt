@@ -62,6 +62,17 @@ data class Lesson(val id:String=UUID.randomUUID().toString(),val name:String,val
 data class Plan(val date:String=LocalDate.now().toString(),val target:Int=240,val lessons:List<Lesson>,val closed:Boolean=false){
  val minutes:Int get()=lessons.sumOf{it.actual}; val tests:Int get()=lessons.sumOf{it.tests}
 }
+data class StudyBreak(val start:String,val end:String,val minutes:Int)
+internal fun studyBreaks(lessons:List<Lesson>):List<StudyBreak>{
+ val sorted=lessons.sortedBy{runCatching{LocalTime.parse(it.start)}.getOrDefault(LocalTime.MIN)}
+ return sorted.zipWithNext().mapNotNull{(a,b)->runCatching{val from=LocalTime.parse(a.end);val to=LocalTime.parse(b.start);val gap=Duration.between(from,to).toMinutes().toInt();if(gap>0)StudyBreak(a.end,b.start,gap)else null}.getOrNull()}
+}
+internal fun isValidPlan(target:Int,lessons:List<Lesson>):Boolean{
+ if(target<=0||lessons.isEmpty())return false
+ val sorted=lessons.sortedBy{it.start}
+ val valid=sorted.all{l->runCatching{l.name.isNotBlank()&&l.topic.isNotBlank()&&LocalTime.parse(l.end).isAfter(LocalTime.parse(l.start))}.getOrDefault(false)}
+ return valid&&sorted.zipWithNext().all{(a,b)->runCatching{!LocalTime.parse(a.end).isAfter(LocalTime.parse(b.start))}.getOrDefault(false)}
+}
 private fun load(c:Context):List<Plan> = runCatching{
  val a=JSONArray(c.getSharedPreferences(PREF,0).getString("plans","[]"))
  (0 until a.length()).map{ i-> val o=a.getJSONObject(i);val l=o.getJSONArray("lessons")
@@ -186,6 +197,8 @@ private fun hasAccess(c:Context):Boolean{
  if(p==null)item{Text("هنوز برنامه‌ای نساختی.",color=muted)}
  if(p!=null){
  item{Card(colors=CardDefaults.cardColors(containerColor=card)){Row(Modifier.fillMaxWidth().padding(15.dp),horizontalArrangement=Arrangement.SpaceBetween){Text("هدف: ${p.target} دقیقه",color=fg);Text("ثبت‌شده: ${p.minutes} دقیقه",color=teal)}}}
+ val gaps=studyBreaks(p.lessons)
+ if(gaps.isNotEmpty())item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){Text("استراحت‌های بین درس‌ها",color=teal,fontWeight=FontWeight.Bold);gaps.forEach{g->Text("${fa(g.start)} تا ${fa(g.end)}  ·  ${fa(g.minutes.toString())} دقیقه استراحت",color=muted,fontSize=12.sp,modifier=Modifier.padding(top=5.dp))}}}}
  items(p.lessons){l->Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(14.dp)){
  Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(l.name,color=fg,fontWeight=FontWeight.Bold);Text(l.topic,color=muted,fontSize=12.sp)};Text("${fa(l.start)}–${fa(l.end)}",color=teal)}
  when{l.finished>0->Text("تمام شد · ${l.actual} دقیقه · ${l.tests} تست",color=teal)
@@ -277,17 +290,7 @@ private fun CreateDialog(old: Plan?, close: () -> Unit, savePlan: (Plan) -> Unit
             TextButton(onClick = {
                 val sorted = lessons.sortedBy { it.start }
                 val targetValue = target.toIntOrNull()
-                val validTimes = sorted.all { lesson ->
-                    runCatching {
-                        val startTime = LocalTime.parse(lesson.start)
-                        val endTime = LocalTime.parse(lesson.end)
-                        lesson.name.isNotBlank() && lesson.topic.isNotBlank() && endTime.isAfter(startTime)
-                    }.getOrDefault(false)
-                }
-                val noOverlap = sorted.zipWithNext().all { (first, second) ->
-                    runCatching { !LocalTime.parse(first.end).isAfter(LocalTime.parse(second.start)) }.getOrDefault(false)
-                }
-                if (targetValue != null && targetValue > 0 && validTimes && noOverlap) {
+                if (targetValue != null && isValidPlan(targetValue, sorted)) {
                     savePlan(Plan(date = old?.date ?: LocalDate.now().toString(), target = targetValue, lessons = sorted))
                     close()
                 } else {
