@@ -98,15 +98,15 @@ private fun jalali(d:LocalDate):String{
 private data class JalaliParts(val year:Int,val month:Int,val day:Int)
 private fun jalaliParts(date:LocalDate):JalaliParts{
  val c=PersianCalendar().apply{timeInMillis=date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()}
- return JalaliParts(c.get(PersianCalendar.YEAR),c.get(PersianCalendar.MONTH)+1,c.get(PersianCalendar.DAY_OF_MONTH))
+ return JalaliParts(c.get(1).toInt(),c.get(2).toInt()+1,c.get(5).toInt())
 }
 private fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate{
- val c=PersianCalendar().apply{clear();set(PersianCalendar.YEAR,year);set(PersianCalendar.MONTH,month-1);set(PersianCalendar.DAY_OF_MONTH,day);set(PersianCalendar.HOUR_OF_DAY,12)}
+ val c=PersianCalendar().apply{clear();set(1,year);set(2,month-1);set(5,day);set(11,12)}
  return Instant.ofEpochMilli(c.timeInMillis).atZone(ZoneId.systemDefault()).toLocalDate()
 }
 private fun jalaliMonthLength(year:Int,month:Int):Int{
- val c=PersianCalendar().apply{clear();set(PersianCalendar.YEAR,year);set(PersianCalendar.MONTH,month-1);set(PersianCalendar.DAY_OF_MONTH,1)}
- return c.getActualMaximum(PersianCalendar.DAY_OF_MONTH)
+ val c=PersianCalendar().apply{clear();set(1,year);set(2,month-1);set(5,1)}
+ return c.getActualMaximum(5).toInt()
 }
 private val jalaliMonths=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
 private val faUnits=listOf("صفر","یک","دو","سه","چهار","پنج","شش","هفت","هشت","نه","ده","یازده","دوازده","سیزده","چهارده","پانزده","شانزده","هفده","هجده","نوزده")
