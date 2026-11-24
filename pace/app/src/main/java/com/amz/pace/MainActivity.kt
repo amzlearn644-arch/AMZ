@@ -229,7 +229,7 @@ class MainActivity:ComponentActivity(){
         }}}
         item{Row(verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("جلسه‌های روز",color=fg,fontSize=18.sp,fontWeight=FontWeight.Bold);Text(list.size.toString()+" جلسه · "+list.sumOf{it.duration}+" دقیقه",color=soft,fontSize=11.sp)};FilledTonalButton(onClick=onAdd){Icon(Icons.Default.Add,null);Text("افزودن")}}}
         if(list.isEmpty())item{Empty("برنامه‌ای برای این روز نیست","یک جلسه جدید تعریف کن.",Icons.Default.EventNote)}
-        items(list,key={it.id}){item->ItemCard(item,card,fg,soft,{onDone(item)},{onAlarm(item)},{onEdit(item);onDelete(item)})}
+        items(list,key={it.id}){item->ItemCard(item,card,fg,soft,{onDone(item)},{onFocus(item)},{onAlarm(item)},{onEdit(item)},{onDelete(item)})}
         val gaps=studyBreaks(list.map{Lesson(name=it.subject,topic=it.title,start=it.start,end=it.end)})
         if(gaps.isNotEmpty()){item{Text("استراحت‌های پیشنهادی",color=fg,fontSize=16.sp,fontWeight=FontWeight.Bold)};items(gaps){g->Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(card).padding(13.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Coffee,null,tint=GOLD);Spacer(Modifier.width(9.dp));Text(g.start+" – "+g.end,color=fg,modifier=Modifier.weight(1f));Text(g.minutes.toString()+" دقیقه",color=GOLD,fontWeight=FontWeight.Bold)}}}
     }
