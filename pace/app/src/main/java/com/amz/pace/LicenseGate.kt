@@ -26,7 +26,7 @@ import org.json.JSONObject
 import java.security.MessageDigest
 
 private const val LICENSE_PREF = "pace_license"
-private const val PUBLIC_KEY_B64 = "TQ+TzQvCuE1uGaNOflTm9JW6htGVclVCC7gpRUnXsMc="
+private const val PUBLIC_KEY_B64 = "PqCnwg/ywe8gyMXqMSb/+pfLkWFgg8tsItvi7HaWuSA="
 private const val LICENSE_PRODUCT = "AMZ-PACE"
 private const val TELEGRAM_ID = "@Ammmin_33"
 
