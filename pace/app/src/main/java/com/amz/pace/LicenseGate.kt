@@ -53,7 +53,6 @@ private fun validateLicense(code:String,device:String):Boolean {
  if(active) PaceAppContent() else LicenseScreen(device,activation,{activation=it;c.getSharedPreferences(LICENSE_PREF,0).edit().putString("license",it).apply()})
 }
 @Composable private fun LicenseScreen(device:String,initial:String,onActivate:(String)->Unit){
- val clipboard = LocalClipboardManager.current
  var code by remember{mutableStateOf(initial)}
  var error by remember{mutableStateOf("")}
  val bg=Color(0xFF101C32);val gold=Color(0xFF2DD4BF);val paper=Color(0xFFF4F1E8)
@@ -68,7 +67,7 @@ private fun validateLicense(code:String,device:String):Boolean {
  Column(Modifier.padding(14.dp),horizontalAlignment=Alignment.CenterHorizontally){
  Text("شناسه اختصاصی دستگاه",color=gold,fontSize=12.sp)
  Text(device,color=paper,fontSize=13.sp,fontWeight=FontWeight.Bold,textAlign=TextAlign.Center)
- TextButton(onClick={clipboard.setText(androidx.compose.ui.text.AnnotatedString(device))}){Icon(Icons.Default.ContentCopy,null);Text("کپی شناسه")}
+ TextButton(onClick={val manager=c.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager;manager.setPrimaryClip(android.content.ClipData.newPlainText("AMZ Pace Device ID",device))}){Icon(Icons.Default.ContentCopy,null);Text("کپی شناسه")}
  }}
  Spacer(Modifier.height(16.dp))
  OutlinedTextField(code,{code=it;error=""},modifier=Modifier.fillMaxWidth(),label={Text("کد لایسنس")},minLines=2,colors=OutlinedTextFieldDefaults.colors(focusedTextColor=paper,unfocusedTextColor=paper,focusedBorderColor=gold,unfocusedBorderColor=Color(0xFF52647C),focusedLabelColor=gold,unfocusedLabelColor=Color(0xFFB7C3D2)))
