@@ -25,7 +25,7 @@ public static class BuildAndroid
         PlayerSettings.bundleVersion = "1.0.0";
         PlayerSettings.Android.bundleVersionCode = 1;
         PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
-        PlayerSettings.Android.minSdkVersion = Android最低Sdk();
+        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel23;
         EditorUserBuildSettings.buildAppBundle = false;
         EditorUserBuildSettings.androidBuildSystem = AndroidBuildSystem.Gradle;
 
@@ -44,10 +44,5 @@ public static class BuildAndroid
         if (report.summary.result != BuildResult.Succeeded)
             throw new System.Exception("Android build failed: " + report.summary.result);
         Debug.Log("APK created: " + output);
-    }
-
-    private static AndroidSdkVersions Android最低Sdk()
-    {
-        return AndroidSdkVersions.AndroidApiLevel23;
     }
 }
