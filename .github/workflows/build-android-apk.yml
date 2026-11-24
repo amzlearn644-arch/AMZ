@@ -1,0 +1,39 @@
+name: Build AMZ Racer Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - unity-car-game
+    paths:
+      - "unity-car-game/**"
+      - ".github/workflows/build-android-apk.yml"
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with Unity
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: unity-car-game
+          unityVersion: 2022.3.62f1
+          targetPlatform: Android
+          buildMethod: BuildAndroid.Build
+          buildsPath: build
+          buildName: AMZ-Racer
+          versioning: None
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AMZ-Racer-Android-APK
+          path: build/Android/AMZ-Racer.apk
+          if-no-files-found: error
+          retention-days: 14
