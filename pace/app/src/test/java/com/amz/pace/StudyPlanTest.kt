@@ -33,4 +33,35 @@ class StudyPlanTest {
     @Test fun acceptsValidPlan() {
         assertTrue(isValidPlan(120, listOf(lesson("ریاضی","09:00","10:00"), lesson("فیزیک","10:15","11:15"))))
     }
+    @Test fun convertsNowruzAndLeapDayBoundaries() {
+        assertEquals(JalaliParts(1403, 1, 1), jalaliParts(java.time.LocalDate.of(2024, 3, 20)))
+        assertEquals(JalaliParts(1403, 12, 30), jalaliParts(java.time.LocalDate.of(2025, 3, 20)))
+        assertEquals(JalaliParts(1404, 1, 1), jalaliParts(java.time.LocalDate.of(2025, 3, 21)))
+    }
+
+    @Test fun jalaliCalendarRoundTripsRepresentativeDates() {
+        val dates = listOf(
+            java.time.LocalDate.of(2024, 3, 20),
+            java.time.LocalDate.of(2024, 8, 12),
+            java.time.LocalDate.of(2025, 3, 20),
+            java.time.LocalDate.of(2026, 11, 24)
+        )
+        dates.forEach { date ->
+            val j = jalaliParts(date)
+            assertEquals(date, jalaliToGregorian(j.year, j.month, j.day))
+        }
+    }
+
+    @Test fun jalaliMonthLengthsAreValid() {
+        assertEquals(31, jalaliMonthLength(1403, 1))
+        assertEquals(30, jalaliMonthLength(1403, 7))
+        assertEquals(30, jalaliMonthLength(1403, 12))
+        assertEquals(29, jalaliMonthLength(1404, 12))
+    }
+
+    @Test fun speaksPersianTimeNaturally() {
+        assertEquals("ساعت یازده و چهل و پنج دقیقه", speakTime("11:45"))
+        assertEquals("ساعت صفر و پنج دقیقه", speakTime("00:05"))
+    }
+
 }
