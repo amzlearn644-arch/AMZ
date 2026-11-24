@@ -53,6 +53,7 @@ private fun validateLicense(code:String,device:String):Boolean {
  if(active) PaceAppContent() else LicenseScreen(device,activation,{activation=it;c.getSharedPreferences(LICENSE_PREF,0).edit().putString("license",it).apply()})
 }
 @Composable private fun LicenseScreen(device:String,initial:String,onActivate:(String)->Unit){
+ val c= androidx.compose.ui.platform.LocalContext.current
  var code by remember{mutableStateOf(initial)}
  var error by remember{mutableStateOf("")}
  val bg=Color(0xFF101C32);val gold=Color(0xFF2DD4BF);val paper=Color(0xFFF4F1E8)
