@@ -157,7 +157,7 @@ internal fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"س
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}};override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);recreate()}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
-class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0L)scheduleEnd(c,l,p.date)else scheduleStart(c,l,p.date)}}}}}
+class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0L)scheduleEnd(c,l,p.date,p.id)else scheduleStart(c,l,p.date)}}}}}
 class AnnounceService:Service(),TextToSpeech.OnInitListener{
  private var t:TextToSpeech?=null;private var msg=""
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
@@ -196,13 +196,13 @@ private fun scheduleStart(c:Context,l:Lesson,date:String){
  if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
  else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
 }
-private fun scheduleEnd(c:Context,l:Lesson,date:String){
+private fun scheduleEnd(c:Context,l:Lesson,date:String,planId:String){
  val am=c.getSystemService(AlarmManager::class.java)
  val time=LocalTime.parse(l.end)
  var at=LocalDate.parse(date).atTime(time).atZone(ZoneId.systemDefault())
  if(at.toInstant().toEpochMilli()<=System.currentTimeMillis()) return
  val intent=Intent(c,StudyAlarmReceiver::class.java)
-  .putExtra("kind","end").putExtra("lesson",l.name).putExtra("lessonId",l.id).putExtra("date",date).putExtra("clock",speakTime(l.end))
+  .putExtra("kind","end").putExtra("lesson",l.name).putExtra("lessonId",l.id).putExtra("date",date).putExtra("planId",planId).putExtra("clock",speakTime(l.end))
  val pi=PendingIntent.getBroadcast(c,l.id.hashCode()+1,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
  if(Build.VERSION.SDK_INT>=23)am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
  else am.setExact(AlarmManager.RTC_WAKEUP,at.toInstant().toEpochMilli(),pi)
@@ -241,7 +241,7 @@ private fun hasAccess(c:Context):Boolean{
  setup->Column(Modifier.fillMaxSize().padding(26.dp),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Logo(90);Text("به AMZ Pace خوش آمدی",color=fg,fontSize=24.sp,fontWeight=FontWeight.Bold);Text("با چه اسمی صدایت کنیم؟",color=muted);OutlinedTextField(name,{name=it},label={Text("نام شما")});Button(onClick={user=name.trim();pref.edit().putString("user",user).apply();setup=false},enabled=name.isNotBlank()){Text("ادامه")}}
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
- AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.date==plan.date}+plan);save(c,plans)})
+ AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)}},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans)})
  1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme){theme=it;pref.edit().putString("theme",it).apply()}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
@@ -263,7 +263,7 @@ private fun hasAccess(c:Context):Boolean{
  val context=LocalContext.current
  var create by remember{mutableStateOf(false)};var finish by remember{mutableStateOf<Lesson?>(null)};var yes by remember{mutableStateOf(false)};var count by remember{mutableStateOf("0")}
  var selectedPlanId by remember { mutableStateOf(plans.firstOrNull{it.date==LocalDate.now().toString()}?.id ?: "") };val todaysPlans=plans.filter{it.date==LocalDate.now().toString()};if(todaysPlans.none{it.id==selectedPlanId})selectedPlanId=todaysPlans.firstOrNull()?.id ?: "";val p=todaysPlans.firstOrNull{it.id==selectedPlanId};val done=p?.lessons?.count{it.finished>0}?:0
- LaunchedEffect(p?.lessons){val activity=context as? ComponentActivity;val intent=activity?.intent;if(intent?.getStringExtra("kind")=="end"){val id=intent.getStringExtra("lessonId");val lesson=p?.lessons?.firstOrNull{it.id==id&&it.finished==0L};if(lesson!=null){finish=lesson;yes=false;count="0"};intent.removeExtra("kind");intent.removeExtra("lessonId");intent.removeExtra("date")}}
+ LaunchedEffect(p?.lessons){val activity=context as? ComponentActivity;val intent=activity?.intent;if(intent?.getStringExtra("kind")=="end"){val planId=intent.getStringExtra("planId");val alarmPlan=plans.firstOrNull{it.id==planId} ?: p;if(alarmPlan!=null)selectedPlanId=alarmPlan.id;val id=intent.getStringExtra("lessonId");val lesson=alarmPlan?.lessons?.firstOrNull{it.id==id&&it.finished==0L};if(lesson!=null){finish=lesson;yes=false;count="0"};intent.removeExtra("kind");intent.removeExtra("lessonId");intent.removeExtra("date");intent.removeExtra("planId")}}
  LazyColumn(Modifier.fillMaxSize().padding(horizontal=16.dp),contentPadding=PaddingValues(bottom=16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
  item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(18.dp)){Text("سلام ${user}، آماده‌ای؟",color=fg,fontSize=22.sp,fontWeight=FontWeight.Bold);Text("با تمرکز پیش برو؛ استراحت را هم فراموش نکن.",color=muted);Spacer(Modifier.height(10.dp));Text("پیشرفت امروز: ${done}/${p?.lessons?.size?:0} درس",color=teal,fontWeight=FontWeight.Bold)}}}
  item{Row(verticalAlignment=Alignment.CenterVertically){Text("برنامه امروز",color=fg,fontSize=18.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f));Button(onClick={create=true}){Icon(Icons.Default.Add,null);Text("برنامه جدید")}}}
@@ -279,7 +279,7 @@ private fun hasAccess(c:Context):Boolean{
  LocalTime.now()>=LocalTime.parse(l.start)&&LocalTime.now()<LocalTime.parse(l.end)->Button(onClick={
  val started=System.currentTimeMillis()
  onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(started=started) else it}))
- scheduleEnd(context,l,p.date)
+ scheduleEnd(context,l,p.date,p.id)
 },modifier=Modifier.fillMaxWidth()){Text("شروع مطالعه")}
  LocalTime.now()>=LocalTime.parse(l.end)->Text("زمان این بازه گذشته است؛ برای ثبت مطالعه، بازه را در برنامه اصلاح کن.",color=muted,fontSize=12.sp)
  else->Text("شروع این درس ساعت "+fa(l.start)+" فعال می‌شود",color=muted,fontSize=12.sp)}
@@ -287,7 +287,7 @@ private fun hasAccess(c:Context):Boolean{
  if(p.lessons.all{it.finished>0})item{Card(colors=CardDefaults.cardColors(containerColor=card)){Column(Modifier.padding(16.dp)){val delta=p.minutes-p.target;Text("تحلیل امروز",color=fg,fontWeight=FontWeight.Bold,fontSize=18.sp);Text(if(delta>=0)"به هدف رسیدی؛ ${delta} دقیقه بیشتر!" else "${-delta} دقیقه تا هدف فاصله داشتی.",color=teal);Text("مجموع تست: ${p.tests}",color=fg);p.lessons.forEach{Text("${it.name}: ${it.actual} دقیقه، ${it.tests} تست",color=muted,fontSize=12.sp)};Bars(p.lessons.map{it.name to it.actual.toFloat()},teal)}}}
  }
  }
- if(create)CreateDialog(p,{create=false},onSave)
+ if(create)CreateDialog(null,{create=false},onSave)
  if(finish!=null&&p!=null)AlertDialog(onDismissRequest={finish=null},title={Text("تست این درس را زدی؟")},text={Column{Row{FilterChip(yes,{yes=true},label={Text("بله")});Spacer(Modifier.width(8.dp));FilterChip(!yes,{yes=false},label={Text("خیر")})};if(yes)OutlinedTextField(count,{count=it.filter(Char::isDigit)},label={Text("تعداد تست")})}},confirmButton={TextButton(onClick={val l=finish!!;onUpdate(p.copy(lessons=p.lessons.map{if(it.id==l.id)it.copy(finished=System.currentTimeMillis(),tests=if(yes)count.toIntOrNull()?:0 else 0)else it},closed=p.lessons.all{it.id==l.id||it.finished>0}));finish=null}){Text("ثبت")}})
 }
 @Composable
