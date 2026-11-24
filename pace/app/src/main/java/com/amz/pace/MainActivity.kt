@@ -223,7 +223,7 @@ private fun scheduleBreaks(c:Context,plan:Plan){
 }
 private fun cancelBreakAlarms(c:Context,plan:Plan){
  val am=c.getSystemService(AlarmManager::class.java)
- repeat(studyBreaks(plan.lessons).size*2){offset->
+ repeat(100){offset->
   val pi=PendingIntent.getBroadcast(c,plan.id.hashCode()+10000+offset,Intent(c,StudyAlarmReceiver::class.java),PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
   if(pi!=null){am.cancel(pi);pi.cancel()}
  }
@@ -244,7 +244,7 @@ private fun hasAccess(c:Context):Boolean{
 @Composable fun PaceAppContent(){
  val c=LocalContext.current;val pref=c.getSharedPreferences(PREF,0)
  var plans by remember{mutableStateOf(load(c))};var user by remember{mutableStateOf(pref.getString("user","")?:"")}
- var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")}
+ var page by remember{mutableIntStateOf(0)};var theme by remember{mutableStateOf(pref.getString("theme","dark")?:"dark")};var uiLanguage by remember{mutableStateOf(pref.getString("ui_language","fa")?:"fa")}
  var tick by remember{mutableIntStateOf(0)};LaunchedEffect(Unit){while(true){kotlinx.coroutines.delay(1000);tick++;plans=load(c)}}
  var permissionRefresh by remember{mutableIntStateOf(0)}
  DisposableEffect(c){val owner=c as? LifecycleOwner;val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_RESUME)permissionRefresh++};owner?.lifecycle?.addObserver(observer);onDispose{owner?.lifecycle?.removeObserver(observer)}}
@@ -270,7 +270,7 @@ private fun hasAccess(c:Context):Boolean{
  else->Column{
  Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Logo(42);Spacer(Modifier.width(10.dp));Column(Modifier.weight(1f)){Text("AMZ PACE",color=fg,fontWeight=FontWeight.Black,letterSpacing=2.sp);Text("برنامه‌ریز مطالعه",color=muted,fontSize=12.sp)};Text(jalali(LocalDate.now()),color=muted,fontSize=12.sp)}
  AnimatedContent(page,label="page"){p->when(p){0->Today(plans,user,card,fg,{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{lesson->cancelLessonAlarms(c,lesson);if(lesson.started>0&&lesson.finished==0L)scheduleEnd(c,lesson,plan.date,plan.id)else scheduleStart(c,lesson,plan.date)};cancelBreakAlarms(c,plan);scheduleBreaks(c,plan)},{plan->plans=(plans.filterNot{it.id==plan.id}+plan);save(c,plans);plan.lessons.forEach{scheduleStart(c,it,plan.date)};scheduleBreaks(c,plan)},{plan->plan.lessons.forEach{cancelLessonAlarms(c,it)};cancelBreakAlarms(c,plan);plans=plans.filterNot{it.id==plan.id};save(c,plans)})
- 1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme){theme=it;pref.edit().putString("theme",it).apply()}}}
+ 1->Reports(plans,card,fg);2->CalendarView(plans,card,fg);else->Settings(c,card,fg,theme,{theme=it;pref.edit().putString("theme",it).apply()},uiLanguage){uiLanguage=it;pref.edit().putString("ui_language",it).apply()}}}
  NavigationBar(containerColor=card){listOf("امروز","گزارش","تقویم","تنظیمات").forEachIndexed{i,s->NavigationBarItem(page==i,{page=i},{Icon(listOf(Icons.Default.Today,Icons.Default.BarChart,Icons.Default.CalendarMonth,Icons.Default.Tune)[i],null)},label={Text(s)},colors=NavigationBarItemDefaults.colors(selectedIconColor=teal,selectedTextColor=teal,indicatorColor=teal.copy(alpha=.15f)))}}
  }
  }
@@ -488,7 +488,7 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
         }
     }
 }
-@Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit){
+@Composable private fun Settings(c:Context,card:Color,fg:Color,theme:String,setTheme:(String)->Unit,uiLanguage:String,setUiLanguage:(String)->Unit){
  val pref=c.getSharedPreferences(PREF,0)
  var speech by remember{mutableStateOf(pref.getString("speech","fa")?:"fa")}
  var volume by remember{mutableFloatStateOf(pref.getFloat("volume",1f))}
@@ -501,7 +501,7 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
    OutlinedTextField(value=displayName,onValueChange={displayName=it;nameSaved=false},singleLine=true,label={Text("نامی که دستیار صدایت می‌کند")})
    TextButton(onClick={if(displayName.isNotBlank()){pref.edit().putString("user",displayName.trim()).apply();nameSaved=true}}){Text(if(nameSaved)"ذخیره شد" else "ذخیره نام")}
    Divider()
-   Text("پوسته",color=fg)
+   Text("زبان رابط کاربری",color=fg)\n   Row{FilterChip(uiLanguage=="fa",{setUiLanguage("fa")},label={Text("فارسی")});FilterChip(uiLanguage=="en",{setUiLanguage("en")},label={Text("English")})}\n   Divider()\n   Text("پوسته",color=fg)
    Row{listOf("dark" to "تیره","light" to "روشن").forEach{FilterChip(theme==it.first,{setTheme(it.first)},label={Text(it.second)})}}
    Divider()
    Text("زبان گفتار",color=fg)
