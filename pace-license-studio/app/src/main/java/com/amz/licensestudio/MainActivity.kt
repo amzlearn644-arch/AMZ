@@ -3,13 +3,10 @@ package com.amz.licensestudio
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,12 +33,11 @@ import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.json.JSONObject
 import java.io.File
-import java.security.MessageDigest
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private const val EXPECTED_PUBLIC_KEY = "TQ+TzQvCuE1uGaNOflTm9JW6htGVclVCC7gpRUnXsMc="
 private const val KEY_FILE = "amz_pace_signing_key.pk8"
 private const val ACCESS_PIN = "4172"
 
@@ -52,32 +48,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun decodePrivateKey(context: Context, uri: Uri): ByteArray {
-    val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        ?: error("امکان خواندن فایل کلید وجود ندارد.")
-    val text = raw.toString(Charsets.UTF_8).trim()
-    val seed = if (text.startsWith("-----BEGIN PRIVATE KEY-----")) {
-        val body = text.substringAfter("-----BEGIN PRIVATE KEY-----")
-            .substringBefore("-----END PRIVATE KEY-----")
-            .filterNot { it.isWhitespace() }
-        val der = Base64.decode(body, Base64.DEFAULT)
-        require(der.size >= 32) { "ساختار فایل کلید خصوصی معتبر نیست." }
-        der.copyOfRange(der.size - 32, der.size)
-    } else {
-        val decoded = try { Base64.decode(text, Base64.DEFAULT) } catch (_: Throwable) { raw }
-        when {
-            decoded.size == 32 -> decoded
-            decoded.size >= 32 -> decoded.copyOfRange(decoded.size - 32, decoded.size)
-            else -> error("فایل باید شامل کلید خصوصی Ed25519 با قالب PEM یا یک کلید ۳۲ بایتی باشد.")
-        }
+private fun createKeyPair(keyFile: File): String {
+    require(!keyFile.exists() || keyFile.length() == 0L) {
+        "کلید قبلاً ساخته شده است؛ برای جلوگیری از باطل‌شدن لایسنس‌های قبلی، کلید جدید نسازید."
     }
-    require(seed.size == 32) { "طول کلید خصوصی معتبر نیست." }
+    val seed = ByteArray(32)
+    SecureRandom().nextBytes(seed)
     val privateKey = Ed25519PrivateKeyParameters(seed, 0)
-    val derivedPublic = Base64.encodeToString(privateKey.generatePublicKey().encoded, Base64.NO_WRAP)
-    require(derivedPublic == EXPECTED_PUBLIC_KEY) {
-        "این کلید با AMZ Pace مطابقت ندارد. فایل کلید خصوصی صحیح را انتخاب کنید."
-    }
-    return seed
+    keyFile.writeBytes(seed)
+    return Base64.encodeToString(privateKey.generatePublicKey().encoded, Base64.NO_WRAP)
+}
+
+private fun derivePublicKey(seed: ByteArray): String {
+    require(seed.size == 32) { "فایل کلید خصوصی ذخیره‌شده معتبر نیست." }
+    return Base64.encodeToString(
+        Ed25519PrivateKeyParameters(seed, 0).generatePublicKey().encoded,
+        Base64.NO_WRAP
+    )
 }
 
 private fun makeLicense(seed: ByteArray, deviceId: String): String {
@@ -142,23 +129,8 @@ private fun StudioScreenUnlocked() {
     var deviceId by remember { mutableStateOf("") }
     var license by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
-    var showKeyWarning by remember { mutableStateOf(!keyReady) }
+    var publicKey by remember { mutableStateOf(if (keyReady) runCatching { derivePublicKey(keyFile.readBytes()) }.getOrDefault("") else "") }
     var keyVisible by remember { mutableStateOf(false) }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            try {
-                val seed = decodePrivateKey(context, uri)
-                keyFile.writeBytes(seed)
-                keyReady = true
-                showKeyWarning = false
-                error = ""
-                Toast.makeText(context, "کلید خصوصی با موفقیت در حافظه امن داخلی برنامه ذخیره شد.", Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                error = e.message ?: "هنگام خواندن کلید خصوصی خطایی رخ داد."
-            }
-        }
-    }
 
     val bg = Color(0xFF0B1220)
     val panel = Color(0xFF172338)
@@ -193,15 +165,45 @@ private fun StudioScreenUnlocked() {
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "فایل کلید خصوصی را فقط روی دستگاه خودت وارد کن. برنامه پس از بررسی، کلید را فقط در حافظه داخلی خودش نگه می‌دارد. این فایل را برای هیچ‌کس ارسال نکن.",
+                            if (keyReady)
+                                "جفت‌کلید این برنامه ساخته شده و کلید خصوصی فقط در حافظه داخلی برنامه نگهداری می‌شود. کلید عمومی را کپی کن و برای تنظیم نسخه AMZ Pace به سازنده بده."
+                            else
+                                "برای شروع، یک جفت‌کلید Ed25519 روی همین گوشی بساز. کلید خصوصی در حافظه داخلی برنامه می‌ماند و فقط کلید عمومی را باید برای تنظیم AMZ Pace ارسال کنی. ساخت کلید فقط یک‌بار انجام می‌شود.",
                             color = Color(0xFFAFBDCE), fontSize = 12.sp, lineHeight = 19.sp
                         )
                         Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { picker.launch(arrayOf("application/x-pem-file", "application/octet-stream", "text/plain", "*/*")) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(if (keyReady) "انتخاب یا جایگزینی کلید خصوصی" else "انتخاب فایل کلید خصوصی") }
+                        if (!keyReady) {
+                            Button(
+                                onClick = {
+                                    try {
+                                        publicKey = createKeyPair(keyFile)
+                                        keyReady = true
+                                        error = ""
+                                        Toast.makeText(context, "جفت‌کلید با موفقیت ساخته شد. از کلید خصوصی نسخه پشتیبان امن بگیر.", Toast.LENGTH_LONG).show()
+                                    } catch (e: Exception) {
+                                        error = e.message ?: "ساخت کلید انجام نشد."
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("ساخت جفت‌کلید امن روی این گوشی") }
+                        }
                         if (keyReady) {
+                            if (publicKey.isBlank()) {
+                                publicKey = runCatching { derivePublicKey(keyFile.readBytes()) }.getOrDefault("")
+                            }
+                            Text("کلید عمومی (برای ارسال به سازنده AMZ Pace)", color = mint, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Text(publicKey, color = white, fontSize = 11.sp)
+                            OutlinedButton(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("AMZ Pace Public Key", publicKey))
+                                Toast.makeText(context, "کلید عمومی کپی شد. فقط همین کلید را ارسال کن.", Toast.LENGTH_SHORT).show()
+                            }, modifier = Modifier.fillMaxWidth(), enabled = publicKey.isNotBlank()) {
+                                Icon(Icons.Default.ContentCopy, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("کپی کلید عمومی")
+                            }
+
                             Spacer(Modifier.height(10.dp))
                             OutlinedButton(onClick = { keyVisible = !keyVisible }, modifier = Modifier.fillMaxWidth()) {
                                 Text(if (keyVisible) "مخفی‌کردن کلید خصوصی" else "نمایش کلید خصوصی")
@@ -296,7 +298,7 @@ private fun StudioScreenUnlocked() {
                 }
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    "نکته امنیتی: کلید خصوصی هرگز به سرور یا GitHub ارسال نمی‌شود. از فایل اصلی کلید خصوصی یک نسخه پشتیبان امن و آفلاین نگه‌دار. با حذف داده‌های این برنامه، نسخه ذخیره‌شده کلید نیز پاک می‌شود.",
+                    "نکته امنیتی: کلید خصوصی فقط در حافظه داخلی این برنامه ذخیره می‌شود و هرگز به AMZ Pace یا GitHub ارسال نمی‌شود. از کلید خصوصی یک نسخه پشتیبان امن و آفلاین نگه‌دار. با حذف داده‌های برنامه، کلید ذخیره‌شده نیز پاک می‌شود. ساخت کلید تازه، لایسنس‌های قبلی را نامعتبر می‌کند.",
                     color = Color(0xFF8999AD), fontSize = 11.sp, textAlign = TextAlign.Center, lineHeight = 17.sp
                 )
                 Text("ساخته‌شده توسط Amin", color = Color(0xFF66778E), fontSize = 11.sp,
