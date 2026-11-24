@@ -436,11 +436,11 @@ private fun chooseTime(c:Context,initial:String,done:(String)->Unit){val t=runCa
         Card(Modifier.fillMaxWidth().weight(1f),colors=CardDefaults.cardColors(containerColor=card)) {
             Column(Modifier.padding(14.dp)) {
                 Text(jalali(selected),color=fg,fontWeight=FontWeight.Bold)
-                if(selectedPlan==null) Text("برای این روز برنامه یا گزارشی ثبت نشده است.",color=muted,modifier=Modifier.padding(top=8.dp))
+                if(selectedPlans.isEmpty()) Text("برای این روز برنامه یا گزارشی ثبت نشده است.",color=muted,modifier=Modifier.padding(top=8.dp))
                 else {
-                    Text("${fa(selectedPlan.minutes.toString())} دقیقه مطالعه · ${fa(selectedPlan.tests.toString())} تست",color=teal,modifier=Modifier.padding(vertical=8.dp))
+                    Text("${fa(selectedPlans.sumOf{it.minutes}.toString())} دقیقه مطالعه · ${fa(selectedPlans.sumOf{it.tests}.toString())} تست",color=teal,modifier=Modifier.padding(vertical=8.dp))
                     LazyColumn {
-                        items(selectedPlan.lessons,key={it.id}) { lesson ->
+                        items(selectedPlans.flatMap { it.lessons },key={it.id}) { lesson ->
                             Column(Modifier.fillMaxWidth().padding(vertical=5.dp)) {
                                 Text(lesson.name,color=fg,fontWeight=FontWeight.SemiBold)
                                 Text("${lesson.topic} · ${lesson.start} تا ${lesson.end}",color=muted,fontSize=12.sp)
