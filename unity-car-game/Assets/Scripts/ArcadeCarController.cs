@@ -15,6 +15,7 @@ public class ArcadeCarController : MonoBehaviour
     float throttle;
     float steering;
     bool braking;
+    bool keyboardThrottleActive;
 
     public float SpeedKmh => body ? body.velocity.magnitude * 3.6f : 0f;
 
@@ -29,13 +30,20 @@ public class ArcadeCarController : MonoBehaviour
 
     void Update()
     {
-        // Keyboard controls for Editor and desktop builds.
-        float vertical = Input.GetAxisRaw("Vertical");
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        if (Mathf.Abs(vertical) > 0.01f) throttle = vertical;
-        else if (Mathf.Abs(horizontal) < 0.01f && !braking) throttle = 0f;
-        if (Mathf.Abs(horizontal) > 0.01f) steering = horizontal;
-        else steering = 0f;
+        // Keyboard input only takes control while a driving key is held,
+        // so it never cancels the mobile pointer controls.
+        float vertical = 0f;
+        if (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow)) vertical = 1f;
+        if (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow)) vertical = -1f;
+        bool driveKey = vertical != 0f;
+        if (driveKey) { throttle = vertical; keyboardThrottleActive = true; }
+        else if (keyboardThrottleActive) { throttle = 0f; keyboardThrottleActive = false; }
+
+        float horizontal = 0f;
+        if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) horizontal = -1f;
+        if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) horizontal = 1f;
+        steering = horizontal;
+
         if (Input.GetKeyDown(KeyCode.Space)) braking = true;
         if (Input.GetKeyUp(KeyCode.Space)) braking = false;
     }
@@ -58,7 +66,6 @@ public class ArcadeCarController : MonoBehaviour
         float speedFactor = Mathf.Clamp01(body.velocity.magnitude / 3f);
         float direction = localVelocity.z >= -0.5f ? 1f : -1f;
         body.MoveRotation(body.rotation * Quaternion.Euler(0f, steering * steeringPower * speedFactor * direction * Time.fixedDeltaTime, 0f));
-
         Vector3 lateralVelocity = transform.right * localVelocity.x;
         body.AddForce(-lateralVelocity * lateralGrip, ForceMode.Acceleration);
     }
