@@ -109,7 +109,14 @@ private fun jalaliMonthLength(year:Int,month:Int):Int{
  return c.getActualMaximum(PersianCalendar.DAY_OF_MONTH)
 }
 private val jalaliMonths=listOf("فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند")
-private fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${t.hour} و ${t.minute} دقیقه"}.getOrDefault(s)
+private val faUnits=listOf("صفر","یک","دو","سه","چهار","پنج","شش","هفت","هشت","نه","ده","یازده","دوازده","سیزده","چهارده","پانزده","شانزده","هفده","هجده","نوزده")
+private val faTens=listOf("","","بیست","سی","چهل","پنجاه")
+private fun persianNumber(n:Int):String{
+ if(n<20)return faUnits[n.coerceAtLeast(0)]
+ val ten=n/10;val unit=n%10
+ return if(unit==0)faTens[ten] else faTens[ten]+" و "+faUnits[unit]
+}
+private fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${persianNumber(t.hour)} و ${persianNumber(t.minute)} دقیقه"}.getOrDefault(s)
 class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
