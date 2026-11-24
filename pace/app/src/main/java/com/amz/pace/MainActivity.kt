@@ -117,7 +117,7 @@ private fun persianNumber(n:Int):String{
  return if(unit==0)faTens[ten] else faTens[ten]+" و "+faUnits[unit]
 }
 private fun speakTime(s:String):String=runCatching{val t=LocalTime.parse(s);"ساعت ${persianNumber(t.hour)} و ${persianNumber(t.minute)} دقیقه"}.getOrDefault(s)
-class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}}}
+class MainActivity:ComponentActivity(){override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);makeChannel(this);setContent{PaceApp()}};override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);recreate()}}
 private fun makeChannel(c:Context){val n=c.getSystemService(NotificationManager::class.java);if(Build.VERSION.SDK_INT>=26)n.createNotificationChannel(NotificationChannel(CH,"یادآوری مطالعه",NotificationManager.IMPORTANCE_HIGH).apply{description="یادآوری صوتی درس‌ها";lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 class StudyAlarmReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){val s=Intent(c,AnnounceService::class.java).putExtras(i);ContextCompat.startForegroundService(c,s)}}
 class PaceBootReceiver:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent?){if(i?.action!=Intent.ACTION_BOOT_COMPLETED)return;load(c).forEach{p->p.lessons.forEach{l->runCatching{if(l.started>0&&l.finished==0)scheduleEnd(c,l,p.date)else scheduleStart(c,l,p.date)}}}}}
