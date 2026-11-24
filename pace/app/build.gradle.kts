@@ -20,6 +20,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
 }
+// License verification dependency restored.
 dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     implementation(platform("androidx.compose:compose-bom:2025.08.01"))
