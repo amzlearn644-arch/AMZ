@@ -260,7 +260,7 @@ private fun LicenseScreen(device: String, initial: String, onActivate: (String) 
                     color = secondary, fontSize = 12.sp, textAlign = TextAlign.Center, lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(20.dp))
-                Text("Created by Amin", color = Color(0xFF71839A), fontSize = 11.sp)
+                Text("ساخته شده توسط امین", color = Color(0xFF71839A), fontSize = 11.sp)
             }
         }
     }
