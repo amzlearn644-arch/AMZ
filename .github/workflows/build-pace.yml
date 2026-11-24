@@ -31,7 +31,7 @@ jobs:
         with:
           gradle-version: "8.13"
       - name: Build debug APK
-        run: gradle -p pace --no-daemon assembleDebug
+        run: gradle -p pace --no-daemon testDebugUnitTest assembleDebug
       - name: Rename APK
         run: cp pace/app/build/outputs/apk/debug/app-debug.apk AMZ-Pace.apk
       - uses: actions/upload-artifact@v4
