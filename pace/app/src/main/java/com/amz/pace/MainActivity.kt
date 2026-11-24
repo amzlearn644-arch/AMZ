@@ -117,6 +117,7 @@ internal fun jalaliToGregorian(year:Int,month:Int,day:Int):LocalDate {
     var days = 365*jy + (jy/33)*8 + ((jy%33+3)/4)
     days += if (month <= 6) (month-1)*31 else 186 + (month-7)*30
     days += day - 1
+    days += 79
     var gy = 1600 + 400*(days/146097)
     days %= 146097
     var leap = true
