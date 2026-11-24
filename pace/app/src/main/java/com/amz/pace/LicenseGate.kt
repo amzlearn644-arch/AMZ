@@ -30,7 +30,7 @@ private fun deviceFingerprint(c:Context):String {
  val hash=MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8))
  return hash.joinToString("") { "%02X".format(it) }
 }
-private fun validateLicense(code:String,device:String):Boolean = try {
+private fun validateLicense(code:String,device:String):Boolean {\n return try {
  val p=code.trim().split(".")
  if(p.size!=3||p[0]!="AMZP1") return false
  val payload=Base64.decode(p[1],Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -65,7 +65,7 @@ private fun validateLicense(code:String,device:String):Boolean = try {
  Column(Modifier.padding(14.dp),horizontalAlignment=Alignment.CenterHorizontally){
  Text("شناسه اختصاصی دستگاه",color=gold,fontSize=12.sp)
  Text(device,color=paper,fontSize=13.sp,fontWeight=FontWeight.Bold,textAlign=TextAlign.Center)
- TextButton(onClick={val clip=android.content.ClipData.newPlainText("AMZ Pace Device ID",device);(androidx.compose.ui.platform.LocalClipboardManager.current).setText(androidx.compose.ui.text.AnnotatedString(device))}){Icon(Icons.Default.ContentCopy,null);Text("کپی شناسه")}
+ TextButton(onClick={clipboard.setText(androidx.compose.ui.text.AnnotatedString(device))}){Icon(Icons.Default.ContentCopy,null);Text("کپی شناسه")}
  }}
  Spacer(Modifier.height(16.dp))
  OutlinedTextField(code,{code=it;error=""},modifier=Modifier.fillMaxWidth(),label={Text("کد لایسنس")},minLines=2,colors=OutlinedTextFieldDefaults.colors(focusedTextColor=paper,unfocusedTextColor=paper,focusedBorderColor=gold,unfocusedBorderColor=Color(0xFF52647C),focusedLabelColor=gold,unfocusedLabelColor=Color(0xFFB7C3D2)))
