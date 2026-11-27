@@ -3,6 +3,8 @@ package com.amz.ai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +22,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 private val Bg = Color(0xFF090A0D)
 private val Panel = Color(0xFF15171D)
@@ -45,20 +50,33 @@ private fun AMZTheme(content: @Composable () -> Unit) {
     ), content = content)
 }
 
-private data class ChatMessage(val text: String, val user: Boolean, val seconds: Long = 0)
+private data class ChatMessage(val text: String, val user: Boolean)
 
 @Composable
 private fun AMZApp() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val repo = remember { ModelRepository(context) }
+    val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Chat") }
     var mode by remember { mutableStateOf("Fast") }
     var draft by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var elapsed by remember { mutableLongStateOf(0L) }
-    val messages = remember { mutableStateListOf(
-        ChatMessage("سلام! من AMZ AI هستم. برای شروع، یک مدل محلی یا سرویس هوش مصنوعی را متصل کن.", false)
-    ) }
-    LaunchedEffect(busy) {
-        while (busy) { delay(1000); elapsed++ }
+    var query by remember { mutableStateOf("") }
+    var models by remember { mutableStateOf<List<HuggingFaceModel>>(emptyList()) }
+    var installed by remember { mutableStateOf(repo.installedModels()) }
+    var selectedModel by remember { mutableStateOf<File?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    var progress by remember { mutableStateOf<DownloadProgress?>(null) }
+    val messages = remember { mutableStateListOf(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false)) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            loading = true
+            status = "در حال وارد کردن مدل…"
+            runCatching { withContext(Dispatchers.IO) { repo.importGguf(uri) } }
+                .onSuccess { installed = repo.installedModels(); selectedModel = it; status = "مدل وارد شد: ${it.name}" }
+                .onFailure { status = it.message ?: "خطا در وارد کردن مدل" }
+            loading = false
+        }
     }
     Scaffold(containerColor = Bg, bottomBar = {
         NavigationBar(containerColor = Panel, contentColor = White) {
@@ -87,20 +105,16 @@ private fun AMZApp() {
                         ModeChip("Fast", mode == "Fast") { mode = "Fast" }
                         ModeChip("Think", mode == "Think") { mode = "Think" }
                         Spacer(Modifier.weight(1f))
-                        Text("No model connected", color = Muted, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterVertically))
+                        Text(selectedModel?.name ?: "No model loaded", color = Muted, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterVertically))
                     }
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 18.dp)) {
                         items(messages) { msg ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = if (msg.user) Arrangement.End else Arrangement.Start) {
                                 Surface(color = if (msg.user) Color(0xFF28321F) else Panel, shape = RoundedCornerShape(20.dp), modifier = Modifier.widthIn(max = 310.dp)) {
-                                    Column(Modifier.padding(15.dp)) {
-                                        Text(msg.text, color = White, fontSize = 14.sp, lineHeight = 21.sp)
-                                        if (!msg.user && msg.seconds > 0) Text("${msg.seconds}s · estimated tokens", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
-                                    }
+                                    Text(msg.text, color = White, fontSize = 14.sp, lineHeight = 21.sp, modifier = Modifier.padding(15.dp))
                                 }
                             }
                         }
-                        if (busy) item { Text("Preparing response…  ${elapsed}s", color = Accent, fontSize = 12.sp) }
                     }
                     Surface(color = Panel, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Column(Modifier.padding(12.dp)) {
@@ -111,22 +125,80 @@ private fun AMZApp() {
                                 Spacer(Modifier.weight(1f))
                                 IconButton(onClick = {
                                     val text = draft.trim()
-                                    if (text.isNotEmpty() && !busy) {
-                                        messages.add(ChatMessage(text, true)); draft = ""
-                                        messages.add(ChatMessage("برای پاسخ‌گویی هنوز مدلی متصل نشده است. از بخش Models یک مدل GGUF اضافه کن یا در تنظیمات، سرور سازگار را پیکربندی کن.", false))
-                                    }
-                                }, enabled = draft.isNotBlank() && !busy) {
-                                    Icon(Icons.Default.Send, null, tint = if (draft.isNotBlank()) Accent else Muted)
-                                }
+                                    if (text.isNotEmpty()) { messages.add(ChatMessage(text, true)); draft = ""; messages.add(ChatMessage("موتور اجرای GGUF هنوز به رابط چت متصل نشده است. مدل در این نسخه فقط قابل وارد کردن و مدیریت است.", false)) }
+                                }, enabled = draft.isNotBlank()) { Icon(Icons.Default.Send, null, tint = if (draft.isNotBlank()) Accent else Muted) }
                             }
                         }
                     }
                 }
-                "Models" -> FeaturePage("Model library", "مدیریت مدل‌های GGUF، دریافت از Hugging Face و اجرای محلی در مرحله بعد به موتور استنتاج متصل می‌شود.", listOf("Browse models", "Downloaded models", "Import GGUF", "Hardware & benchmark"))
+                "Models" -> {
+                    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
+                        Text("Model library", color = White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                        Text("مدل‌های GGUF را جست‌وجو، دانلود یا از حافظه وارد کن.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp, bottom = 14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Button(onClick = { picker.launch(arrayOf("*/*")) }, colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = White), shape = CircleShape) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("Import GGUF") }
+                            OutlinedButton(onClick = { installed = repo.installedModels() }, shape = CircleShape) { Text("Refresh") }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            BasicTextField(query, { query = it }, Modifier.weight(1f).background(Panel, RoundedCornerShape(14.dp)).padding(14.dp), textStyle = androidx.compose.ui.text.TextStyle(color = White, fontSize = 14.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent), decorationBox = { inner -> if (query.isBlank()) Text("Search Hugging Face GGUF…", color = Muted); inner() })
+                            IconButton(onClick = {
+                                if (query.isNotBlank() && !loading) scope.launch {
+                                    loading = true; status = "Searching Hugging Face…"
+                                    runCatching { repo.search(query) }.onSuccess { models = it; status = "Found ${it.size} GGUF repositories" }.onFailure { status = it.message ?: "Search failed" }
+                                    loading = false
+                                }
+                            }) { Icon(Icons.Default.Search, null, tint = Accent) }
+                        }
+                        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Accent)
+                        if (status.isNotBlank()) Text(status, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp))
+                        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (installed.isNotEmpty()) {
+                                item { Text("Downloaded models", color = Accent, fontWeight = FontWeight.SemiBold) }
+                                items(installed) { file ->
+                                    ModelCard(file.name, "Local · ${"%.2f".format(file.length() / 1_073_741_824.0)} GB", file == selectedModel, "Select") { selectedModel = file; status = "Selected ${file.name}" }
+                                }
+                            }
+                            if (models.isNotEmpty()) item { Text("Hugging Face results", color = Accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp)) }
+                            items(models) { model ->
+                                Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(14.dp)) {
+                                    Text(model.id, color = White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    Text("${model.downloads} downloads · ${model.likes} likes · ${model.ggufFiles.size} GGUF files", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(vertical = 6.dp))
+                                    model.ggufFiles.take(4).forEach { file ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(file, color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                            TextButton(onClick = {
+                                                if (!loading) scope.launch {
+                                                    loading = true; progress = null; status = "Downloading ${file}…"
+                                                    runCatching { repo.download(model.id, file) { progress = it } }
+                                                        .onSuccess { installed = repo.installedModels(); status = "Downloaded ${it.name}" }
+                                                        .onFailure { status = it.message ?: "Download failed" }
+                                                    loading = false
+                                                }
+                                            }) { Text("Download", color = Accent, fontSize = 11.sp) }
+                                        }
+                                    }
+                                    if (model.ggufFiles.size > 4) Text("+ ${model.ggufFiles.size - 4} more files", color = Muted, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                        progress?.let { p ->
+                            Text("${p.fileName} · ${p.percent}% · ${p.received / 1_048_576} MB", color = Accent, fontSize = 11.sp)
+                            LinearProgressIndicator({ p.percent / 100f }, Modifier.fillMaxWidth().padding(bottom = 10.dp), color = Accent)
+                        }
+                    }
+                }
                 "Pals" -> FeaturePage("Your Pals", "دستیارهای شخصی با شخصیت، System Prompt و تنظیمات مستقل.", listOf("Create a Pal", "Assistant presets", "Roleplay profiles"))
                 else -> FeaturePage("Settings", "تنظیمات پیشرفته در حال آماده‌سازی است.", listOf("Inference parameters", "Context & memory", "Voice input / output", "Connected servers", "Appearance & language", "Export chats"))
             }
         }
+    }
+}
+
+@Composable
+private fun ModelCard(title: String, subtitle: String, selected: Boolean, action: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Text(title, color = White, fontSize = 12.sp); Text(subtitle, color = Muted, fontSize = 10.sp) }
+        TextButton(onClick = onClick) { Text(if (selected) "Selected" else action, color = Accent) }
     }
 }
 

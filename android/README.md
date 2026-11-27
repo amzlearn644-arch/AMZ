@@ -1,23 +1,22 @@
 # AMZ AI for Android
 
-Native Android application built with Kotlin and Jetpack Compose.
+Native Kotlin + Jetpack Compose application.
 
-## Current foundation (0.1.0)
-- Dark, rounded chat UI
-- Fast / Think mode selector (UI foundation; model-specific reasoning behavior is not connected yet)
-- Chat shell and navigation for Chat, Models, Pals, Settings
-- Android project isolated under `android/`; the AMZ catalog website remains unchanged
+## 0.2.0 — GGUF model library foundation
+- Search public Hugging Face repositories tagged for GGUF.
+- List GGUF files exposed by each repository.
+- Download selected GGUF files to app-private storage with live byte progress.
+- Import local GGUF files using Android's system document picker.
+- List locally stored GGUF files and select one for the next inference integration.
+- Model downloads use the public Hugging Face resolve endpoint; gated repositories and private models are not yet supported.
+- This release does not yet execute inference. A downloaded/imported model is not a loaded model until the llama.cpp runtime is integrated.
 
 ## Build
-Open this `android/` directory in Android Studio and use JDK 17. Gradle will download the Android Gradle Plugin and AndroidX dependencies. Then build the debug APK from **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
+Open this `android/` directory in Android Studio with JDK 17. Build the debug APK from **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
 
 ## Roadmap
-1. Persistence, chat history, message editing and regeneration
-2. GGUF runtime integration, model import/download and hardware capability detection
-3. Hugging Face model discovery and download manager
-4. OpenAI-compatible remote endpoints and secure API key storage
-5. Pals, prompt templates, inference controls and context management
-6. Token/speed metrics, benchmark and export
-7. Speech-to-text, text-to-speech, tools, web search and localization
-
-Features are added as working integrations; unavailable runtime features are not represented as functional controls.
+1. llama.cpp Android native runtime (JNI/NDK), streaming token generation and safe model lifecycle
+2. Model metadata, memory preflight and hardware/backend capability reporting
+3. Remote OpenAI-compatible endpoints and secure API key storage
+4. Persistent chats, edit/regenerate, Pals and inference settings
+5. Token/speed metrics, benchmark, voice, tools, web search and export
