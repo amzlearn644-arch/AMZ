@@ -138,11 +138,25 @@ private fun AMZApp() {
                                             scope.launch {
                                                 val started = System.currentTimeMillis()
                                                 val prompt = if (mode == "Think") "Think carefully and reason through the task before answering.\\n\\nUser: $text\\nAssistant:" else "User: $text\\nAssistant:"
-                                                val result = runCatching { inference.generate(prompt, 256) }
+                                                messages.add(ChatMessage("", false))
+                                                val answerIndex = messages.lastIndex
+                                                var outputTokens = 0
+                                                val result = runCatching {
+                                                    inference.generate(prompt, 256) { chunk ->
+                                                        outputTokens++
+                                                        val current = messages.getOrNull(answerIndex)
+                                                        if (current != null) messages[answerIndex] = current.copy(text = current.text + chunk)
+                                                    }
+                                                }
                                                 val seconds = (System.currentTimeMillis() - started) / 1000.0
                                                 result.onSuccess { answer ->
-                                                    messages.add(ChatMessage(if (answer.startsWith("ERROR:")) answer else answer + "\\n\\n" + "%.1f".format(seconds) + "s · local inference", false))
-                                                }.onFailure { messages.add(ChatMessage("خطای اجرای مدل: " + (it.message ?: "unknown"), false)) }
+                                                    val current = messages.getOrNull(answerIndex)
+                                                    if (current != null && answer.startsWith("ERROR:")) messages[answerIndex] = current.copy(text = answer)
+                                                    else if (current != null) messages[answerIndex] = current.copy(text = current.text + "\\n\\n" + outputTokens + " tokens · " + "%.1f".format(seconds) + "s")
+                                                }.onFailure { err ->
+                                                    val current = messages.getOrNull(answerIndex)
+                                                    if (current != null) messages[answerIndex] = current.copy(text = "خطای اجرای مدل: " + (err.message ?: "unknown"))
+                                                }
                                                 generating = false
                                             }
                                         }

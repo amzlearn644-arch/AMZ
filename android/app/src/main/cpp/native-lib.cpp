@@ -38,7 +38,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeLoad(JNIE
     llama_sampler_chain_add(g_sampler, llama_sampler_init_greedy());
     return env->NewStringUTF("OK");
 }
-extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(JNIEnv * env, jobject, jstring prompt_, jint maxTokens) {
+extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(JNIEnv * env, jobject, jstring prompt_, jint maxTokens, jobject callback) {
     const char * prompt = env->GetStringUTFChars(prompt_, nullptr);
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_model || !g_ctx || !g_sampler) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: No model is loaded."); }
@@ -58,7 +58,21 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
         const llama_token token = llama_sampler_sample(g_sampler, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
         const int32_t n = llama_token_to_piece(vocab, token, piece.data(), (int32_t)piece.size(), 0, true);
-        if (n > 0) output.append(piece.data(), (size_t)n);
+        if (n > 0) {
+            output.append(piece.data(), (size_t)n);
+            if (callback) {
+                jclass cls = env->GetObjectClass(callback);
+                jmethodID method = env->GetMethodID(cls, "onToken", "(Ljava/lang/String;)V");
+                if (method) {
+                    std::string part(piece.data(), (size_t)n);
+                    jstring chunk = env->NewStringUTF(part.c_str());
+                    env->CallVoidMethod(callback, method, chunk);
+                    env->DeleteLocalRef(chunk);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
+                }
+                env->DeleteLocalRef(cls);
+            }
+        }
         llama_token nextToken = token; auto nextBatch = llama_batch_get_one(&nextToken, 1);
         if (llama_decode(g_ctx, nextBatch) != 0) break;
     }
