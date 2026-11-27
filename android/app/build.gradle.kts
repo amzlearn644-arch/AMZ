@@ -14,9 +14,7 @@ android {
         versionCode = 3
         versionName = "0.3.0"
         ndk { abiFilters += listOf("arm64-v8a") }
-        externalNativeBuild {
-            cmake { cppFlags += listOf("-std=c++17"); arguments += listOf("-DANDROID_STL=c++_shared") }
-        }
+        externalNativeBuild { cmake { cppFlags += listOf("-std=c++17"); arguments += listOf("-DANDROID_STL=c++_shared") } }
     }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     buildFeatures { compose = true }

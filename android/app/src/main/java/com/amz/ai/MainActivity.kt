@@ -67,6 +67,10 @@ private fun AMZApp() {
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var progress by remember { mutableStateOf<DownloadProgress?>(null) }
+    val inference = remember { InferenceRepository() }
+    var modelLoaded by remember { mutableStateOf(false) }
+    var generating by remember { mutableStateOf(false) }
+    var contextSize by remember { mutableIntStateOf(2048) }
     val messages = remember { mutableStateListOf(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false)) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -105,7 +109,7 @@ private fun AMZApp() {
                         ModeChip("Fast", mode == "Fast") { mode = "Fast" }
                         ModeChip("Think", mode == "Think") { mode = "Think" }
                         Spacer(Modifier.weight(1f))
-                        Text(selectedModel?.name ?: "No model loaded", color = Muted, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterVertically))
+                        Text(if (modelLoaded) "● " + (selectedModel?.name ?: "Loaded") else selectedModel?.name ?: "No model loaded", color = if (modelLoaded) Accent else Muted, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterVertically))
                     }
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 18.dp)) {
                         items(messages) { msg ->
@@ -125,8 +129,25 @@ private fun AMZApp() {
                                 Spacer(Modifier.weight(1f))
                                 IconButton(onClick = {
                                     val text = draft.trim()
-                                    if (text.isNotEmpty()) { messages.add(ChatMessage(text, true)); draft = ""; messages.add(ChatMessage("موتور اجرای GGUF هنوز به رابط چت متصل نشده است. مدل در این نسخه فقط قابل وارد کردن و مدیریت است.", false)) }
-                                }, enabled = draft.isNotBlank()) { Icon(Icons.Default.Send, null, tint = if (draft.isNotBlank()) Accent else Muted) }
+                                    if (text.isNotEmpty() && !generating) {
+                                        messages.add(ChatMessage(text, true)); draft = ""
+                                        if (!modelLoaded) {
+                                            messages.add(ChatMessage("ابتدا یک مدل را از بخش Models بارگذاری کن.", false))
+                                        } else {
+                                            generating = true
+                                            scope.launch {
+                                                val started = System.currentTimeMillis()
+                                                val prompt = if (mode == "Think") "Think carefully and reason through the task before answering.\\n\\nUser: $text\\nAssistant:" else "User: $text\\nAssistant:"
+                                                val result = runCatching { inference.generate(prompt, 256) }
+                                                val seconds = (System.currentTimeMillis() - started) / 1000.0
+                                                result.onSuccess { answer ->
+                                                    messages.add(ChatMessage(if (answer.startsWith("ERROR:")) answer else answer + "\\n\\n" + "%.1f".format(seconds) + "s · local inference", false))
+                                                }.onFailure { messages.add(ChatMessage("خطای اجرای مدل: " + (it.message ?: "unknown"), false)) }
+                                                generating = false
+                                            }
+                                        }
+                                    }
+                                }, enabled = draft.isNotBlank() && !generating) { Icon(Icons.Default.Send, null, tint = if (draft.isNotBlank()) Accent else Muted) }
                             }
                         }
                     }
@@ -149,13 +170,25 @@ private fun AMZApp() {
                                 }
                             }) { Icon(Icons.Default.Search, null, tint = Accent) }
                         }
-                        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Accent)
+                        if (loading || generating) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Accent)
                         if (status.isNotBlank()) Text(status, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp))
                         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (installed.isNotEmpty()) {
                                 item { Text("Downloaded models", color = Accent, fontWeight = FontWeight.SemiBold) }
                                 items(installed) { file ->
-                                    ModelCard(file.name, "Local · ${"%.2f".format(file.length() / 1_073_741_824.0)} GB", file == selectedModel, "Select") { selectedModel = file; status = "Selected ${file.name}" }
+                                    ModelCard(file.name, "Local · ${"%.2f".format(file.length() / 1_073_741_824.0)} GB", file == selectedModel, if (modelLoaded && file == selectedModel) "Loaded" else "Load") {
+                                        selectedModel = file
+                                        scope.launch {
+                                            loading = true
+                                            status = "Loading model into native runtime…"
+                                            val result = runCatching { inference.load(file.absolutePath, contextSize) }
+                                            result.onSuccess { message ->
+                                                modelLoaded = message == "OK"
+                                                status = if (modelLoaded) "Model loaded · CPU backend" else message
+                                            }.onFailure { modelLoaded = false; status = it.message ?: "Native model load failed" }
+                                            loading = false
+                                        }
+                                    }
                                 }
                             }
                             if (models.isNotEmpty()) item { Text("Hugging Face results", color = Accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp)) }

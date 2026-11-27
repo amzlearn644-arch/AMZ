@@ -1,18 +1,1 @@
-# AMZ AI for Android
-
-## 0.3.0 — llama.cpp native inference integration (initial CPU path)
-
-- Adds the upstream llama.cpp source as a pinned Git submodule.
-- Adds an Android NDK/CMake JNI bridge for model load, prompt tokenization, greedy token generation and unload.
-- The first backend targets arm64-v8a CPU for a portable baseline. GPU acceleration and streaming UI are not yet enabled.
-- The Kotlin inference repository calls the JNI bridge off the main thread.
-- GGUF chat-template formatting, conversation memory, cancellation, streaming tokens, performance counters and device-specific acceleration remain follow-up work.
-
-### Initialize source
-`git submodule update --init --recursive`
-
-### Build
-Install Android SDK Platform 35, NDK 27.2.12479018, CMake 3.22.1 and JDK 17. Open this directory in Android Studio and build the debug APK.
-
-### Important
-Large models may exceed device RAM. Start with a small quantized GGUF and context size 2048. This first JNI bridge is an integration foundation and must be validated on a physical arm64 device before treating it as production-ready.
+# AMZ AI for Android\n\n## 0.3.0 — Native inference foundation\n- llama.cpp pinned as a Git submodule.\n- JNI bridge for GGUF loading, tokenization and greedy decoding.\n- arm64-v8a CPU baseline; GPU, streaming UI and chat templates remain follow-up work.\n- Models screen loads a local GGUF; Chat sends prompts to the native runtime.\n- Fast/Think currently apply different prompt prefixes only.\n\nInitialize submodule: `git submodule update --init --recursive`.\n\nBuild with JDK 17, SDK 35, NDK 27.2.12479018 and CMake 3.22.1. Start with a small quantized GGUF and context 2048. Validate on a physical arm64 device; large models may exceed RAM. Not production-ready yet.
