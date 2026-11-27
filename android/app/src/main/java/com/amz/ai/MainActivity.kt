@@ -164,7 +164,7 @@ private fun AMZApp() {
                         items(messages) { msg ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = if (msg.user) Arrangement.End else Arrangement.Start) {
                                 Surface(color = if (msg.user) Color(0xFF28321F) else Panel, shape = RoundedCornerShape(20.dp), modifier = Modifier.widthIn(max = 310.dp)) {
-                                    Text(msg.text, color = White, fontSize = 14.sp, lineHeight = 21.sp, modifier = Modifier.padding(15.dp))
+                                    MessageContent(msg.text, isUser = msg.user)
                                 }
                             }
                         }
