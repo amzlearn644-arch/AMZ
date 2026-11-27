@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -58,6 +59,8 @@ private fun AMZApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val repo = remember { ModelRepository(context) }
     val chatHistory = remember { ChatHistoryRepository(context) }
+    val settingsRepository = remember { SettingsRepository(context) }
+    val initialSettings = remember { settingsRepository.load() }
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Chat") }
     var mode by remember { mutableStateOf("Fast") }
@@ -72,11 +75,11 @@ private fun AMZApp() {
     val inference = remember { InferenceRepository() }
     var modelLoaded by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
-    var contextSize by remember { mutableIntStateOf(2048) }
-    var temperature by remember { mutableFloatStateOf(0.7f) }
-    var topP by remember { mutableFloatStateOf(0.9f) }
-    var topK by remember { mutableIntStateOf(40) }
-    var repeatPenalty by remember { mutableFloatStateOf(1.1f) }
+    var contextSize by remember { mutableIntStateOf(initialSettings.contextSize) }
+    var temperature by remember { mutableFloatStateOf(initialSettings.temperature) }
+    var topP by remember { mutableFloatStateOf(initialSettings.topP) }
+    var topK by remember { mutableIntStateOf(initialSettings.topK) }
+    var repeatPenalty by remember { mutableFloatStateOf(initialSettings.repeatPenalty) }
     var showClearHistory by remember { mutableStateOf(false) }
     val messages = remember {
         mutableStateListOf<ChatMessage>().apply {
@@ -84,6 +87,9 @@ private fun AMZApp() {
             if (saved.isEmpty()) add(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false))
             else addAll(saved)
         }
+    }
+    LaunchedEffect(contextSize, temperature, topP, topK, repeatPenalty) {
+        withContext(Dispatchers.IO) { settingsRepository.save(AppSettings(contextSize, temperature, topP, topK, repeatPenalty)) }
     }
     val historySnapshot = messages.joinToString("\u001e") { (if (it.user) "U" else "A") + it.text }
     LaunchedEffect(historySnapshot) {
@@ -274,9 +280,63 @@ private fun AMZApp() {
                     }
                 }
                 "Pals" -> FeaturePage("Your Pals", "دستیارهای شخصی با شخصیت، System Prompt و تنظیمات مستقل.", listOf("Create a Pal", "Assistant presets", "Roleplay profiles"))
-                else -> FeaturePage("Settings", "تنظیمات پیشرفته در حال آماده‌سازی است.", listOf("Inference parameters", "Context & memory", "Voice input / output", "Connected servers", "Appearance & language", "Export chats"))
+                else -> SettingsPage(
+                    contextSize, temperature, topP, topK, repeatPenalty,
+                    onContextSizeChange = { contextSize = it },
+                    onTemperatureChange = { temperature = it },
+                    onTopPChange = { topP = it },
+                    onTopKChange = { topK = it },
+                    onRepeatPenaltyChange = { repeatPenalty = it },
+                    onApplyContext = {
+                        val file = selectedModel
+                        if (file == null) status = "ابتدا یک مدل انتخاب کن."
+                        else scope.launch {
+                            loading = true
+                            status = "در حال بارگذاری دوباره مدل…"
+                            runCatching { inference.load(file.absolutePath, contextSize) }
+                                .onSuccess { modelLoaded = it == "OK"; status = if (modelLoaded) "مدل با Context جدید بارگذاری شد." else it }
+                                .onFailure { modelLoaded = false; status = it.message ?: "خطا در بارگذاری مدل" }
+                            loading = false
+                        }
+                    },
+                    status = status
+                )
             }
         }
+    }
+}
+
+
+@Composable
+private fun SettingsPage(
+    contextSize: Int, temperature: Float, topP: Float, topK: Int, repeatPenalty: Float,
+    onContextSizeChange: (Int) -> Unit, onTemperatureChange: (Float) -> Unit,
+    onTopPChange: (Float) -> Unit, onTopKChange: (Int) -> Unit,
+    onRepeatPenaltyChange: (Float) -> Unit, onApplyContext: () -> Unit, status: String
+) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Inference settings", color = White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Text("تنظیمات به‌صورت خودکار ذخیره می‌شوند.", color = Muted, fontSize = 12.sp)
+        SettingSlider("Temperature", "%.2f".format(temperature), temperature, 0f, 2f, 19, onTemperatureChange)
+        SettingSlider("Top-P", "%.2f".format(topP), topP, 0.05f, 1f, 18, onTopPChange)
+        SettingSlider("Top-K", topK.toString(), topK.toFloat(), 0f, 100f, 19) { onTopKChange(it.toInt()) }
+        SettingSlider("Repeat penalty", "%.2f".format(repeatPenalty), repeatPenalty, 1f, 1.5f, 19, onRepeatPenaltyChange)
+        Divider(color = Surface2)
+        SettingSlider("Context length", contextSize.toString(), contextSize.toFloat(), 512f, 8192f, 14) { onContextSizeChange(it.toInt()) }
+        Text("برای اعمال Context جدید، مدل باید دوباره بارگذاری شود.", color = Muted, fontSize = 11.sp)
+        Button(onClick = onApplyContext, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Bg), shape = CircleShape) { Text("Apply context / reload model") }
+        if (status.isNotBlank()) Text(status, color = Muted, fontSize = 11.sp)
+        Spacer(Modifier.height(20.dp))
+    }
+}
+@Composable
+private fun SettingSlider(title: String, label: String, value: Float, min: Float, max: Float, steps: Int, onChange: (Float) -> Unit) {
+    Column(Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(16.dp)).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(label, color = Accent, fontSize = 12.sp)
+        }
+        Slider(value = value, onValueChange = onChange, valueRange = min..max, steps = steps, colors = SliderDefaults.colors(thumbColor = Accent, activeTrackColor = Accent))
     }
 }
 
