@@ -43,6 +43,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent { AMZTheme { AMZApp() } }
     }
+
+    override fun onDestroy() {
+        // Stop any active decode, then release the native context and model.
+        // nativeUnload waits for the inference mutex, so cleanup cannot free a
+        // model while the generation loop is still using it.
+        NativeLlama.nativeCancelGeneration()
+        Thread({ NativeLlama.nativeUnload() }, "amz-ai-native-cleanup").start()
+        super.onDestroy()
+    }
 }
 
 @Composable
