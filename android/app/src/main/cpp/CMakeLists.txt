@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(amz_ai_native LANGUAGES C CXX)
+
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../../../third_party/llama.cpp llama.cpp)
+
+add_library(amz-ai-native SHARED native-lib.cpp)
+target_compile_features(amz-ai-native PRIVATE cxx_std_17)
+target_link_libraries(amz-ai-native PRIVATE llama android log)

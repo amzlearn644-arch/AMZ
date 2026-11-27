@@ -1,22 +1,18 @@
 # AMZ AI for Android
 
-Native Kotlin + Jetpack Compose application.
+## 0.3.0 — llama.cpp native inference integration (initial CPU path)
 
-## 0.2.0 — GGUF model library foundation
-- Search public Hugging Face repositories tagged for GGUF.
-- List GGUF files exposed by each repository.
-- Download selected GGUF files to app-private storage with live byte progress.
-- Import local GGUF files using Android's system document picker.
-- List locally stored GGUF files and select one for the next inference integration.
-- Model downloads use the public Hugging Face resolve endpoint; gated repositories and private models are not yet supported.
-- This release does not yet execute inference. A downloaded/imported model is not a loaded model until the llama.cpp runtime is integrated.
+- Adds the upstream llama.cpp source as a pinned Git submodule.
+- Adds an Android NDK/CMake JNI bridge for model load, prompt tokenization, greedy token generation and unload.
+- The first backend targets arm64-v8a CPU for a portable baseline. GPU acceleration and streaming UI are not yet enabled.
+- The Kotlin inference repository calls the JNI bridge off the main thread.
+- GGUF chat-template formatting, conversation memory, cancellation, streaming tokens, performance counters and device-specific acceleration remain follow-up work.
 
-## Build
-Open this `android/` directory in Android Studio with JDK 17. Build the debug APK from **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
+### Initialize source
+`git submodule update --init --recursive`
 
-## Roadmap
-1. llama.cpp Android native runtime (JNI/NDK), streaming token generation and safe model lifecycle
-2. Model metadata, memory preflight and hardware/backend capability reporting
-3. Remote OpenAI-compatible endpoints and secure API key storage
-4. Persistent chats, edit/regenerate, Pals and inference settings
-5. Token/speed metrics, benchmark, voice, tools, web search and export
+### Build
+Install Android SDK Platform 35, NDK 27.2.12479018, CMake 3.22.1 and JDK 17. Open this directory in Android Studio and build the debug APK.
+
+### Important
+Large models may exceed device RAM. Start with a small quantized GGUF and context size 2048. This first JNI bridge is an integration foundation and must be validated on a physical arm64 device before treating it as production-ready.
