@@ -150,12 +150,18 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
     if (!g_model || !g_ctx) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: No model is loaded."); }
     llama_memory_clear(llama_get_memory(g_ctx), true);
     const llama_vocab * vocab = llama_model_get_vocab(g_model);
+    const uint32_t contextCapacity = llama_n_ctx(g_ctx);
+    const int requestedLimit = std::clamp(static_cast<int>(maxTokens), 1, 2048);
     const int32_t needed = -llama_tokenize(vocab, prompt, static_cast<int32_t>(strlen(prompt)), nullptr, 0, true, false);
-    if (needed <= 0 || needed > 32768) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: Prompt is empty or too large."); }
+    if (needed <= 0 || static_cast<uint32_t>(needed) >= contextCapacity) {
+        env->ReleaseStringUTFChars(prompt_, prompt);
+        return env->NewStringUTF("ERROR: Prompt exceeds the model context. Reduce chat history or increase context length.");
+    }
     std::vector<llama_token> tokens(static_cast<size_t>(needed));
     const int32_t count = llama_tokenize(vocab, prompt, static_cast<int32_t>(strlen(prompt)), tokens.data(), needed, true, false);
     env->ReleaseStringUTFChars(prompt_, prompt);
     if (count < 0) return env->NewStringUTF("ERROR: Prompt tokenization failed.");
+    if (static_cast<uint32_t>(count) >= contextCapacity) return env->NewStringUTF("ERROR: No context space remains for generation.");
     tokens.resize(static_cast<size_t>(count));
     auto batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
     if (llama_decode(g_ctx, batch) != 0) return env->NewStringUTF("ERROR: Prompt evaluation failed; reduce context.");
@@ -184,7 +190,9 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
     std::string output, pendingUtf8;
     std::vector<char> piece(16 * 1024);
     jint generatedTokens = 0;
-    const int limit = std::clamp(static_cast<int>(maxTokens), 1, 2048);
+    // Never decode beyond the allocated KV-cache/context capacity.
+    const int availableTokens = static_cast<int>(contextCapacity - static_cast<uint32_t>(count));
+    const int limit = std::min(requestedLimit, availableTokens);
     for (int i = 0; i < limit && !g_cancel_requested.load(std::memory_order_relaxed); ++i) {
         const llama_token token = llama_sampler_sample(sampler, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
@@ -209,5 +217,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_amz_ai_NativeLlama_nativeUnload(JNIEnv *, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex); release_locked();
+    g_cancel_requested.store(true, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    release_locked();
 }
