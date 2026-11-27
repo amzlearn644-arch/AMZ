@@ -34,7 +34,7 @@ fun PalsScreen(pals: List<Pal>, activePalId: String?, onSelect: (Pal?) -> Unit, 
         }
     }
     deleting?.let { pal ->
-        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("Delete ${'$'}{pal.name}?") },
+        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("Delete " + pal.name + "?") },
             text = { Text("This assistant will be removed.") },
             confirmButton = { TextButton(onClick = {
                 val updated = pals.filterNot { it.id == pal.id }; onSave(updated)
