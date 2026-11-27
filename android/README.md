@@ -31,3 +31,10 @@
 Build with JDK 17, Android SDK 35, NDK 27.2.12479018 and CMake 3.22.1.
 Initialize llama.cpp: `git submodule update --init --recursive`
 Start with a small quantized GGUF and context 2048. Test on a physical arm64 phone; model RAM needs vary.
+
+
+## 1.0.0 — Native memory and context safety
+- Release the loaded llama.cpp context and model when the Android activity is destroyed; request generation cancellation before cleanup.
+- Bound generation by the actual allocated context capacity so decoding cannot continue past the KV cache.
+- Return a clear error when the prompt itself exceeds the model context.
+- Native cleanup waits on the inference mutex, preventing the model/context from being freed while inference is using them.
