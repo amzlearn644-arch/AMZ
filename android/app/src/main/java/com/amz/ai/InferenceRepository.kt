@@ -51,5 +51,11 @@ class InferenceRepository {
         )
     }
 
+    fun beginGeneration() = NativeLlama.nativeBeginGeneration()
+
+    fun cancelGeneration() = NativeLlama.nativeCancelGeneration()
+
+    fun wasGenerationCancelled(): Boolean = NativeLlama.nativeWasGenerationCancelled()
+
     suspend fun unload() = withContext(Dispatchers.IO) { NativeLlama.nativeUnload() }
 }
