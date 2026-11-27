@@ -4,6 +4,7 @@ object NativeLlama {
     init { System.loadLibrary("amz-ai-native") }
     external fun nativeVersion(): String
     external fun nativeLoad(path: String, contextSize: Int): String
+    external fun nativeFormatChat(roles: Array<String>, contents: Array<String>): String
     external fun nativeGenerate(prompt: String, maxTokens: Int, callback: TokenCallback?): String
     external fun nativeUnload()
 }

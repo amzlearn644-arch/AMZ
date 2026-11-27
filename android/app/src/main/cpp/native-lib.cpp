@@ -18,15 +18,21 @@ static void release_locked() {
     if (g_model) { llama_model_free(g_model); g_model = nullptr; }
 }
 
-// Convert complete UTF-8 code points to UTF-16. Incomplete trailing bytes stay
-// in pending so a multi-byte character split across llama tokens is never lost.
+static std::string java_string(JNIEnv * env, jstring value) {
+    if (!value) return {};
+    const char * chars = env->GetStringUTFChars(value, nullptr);
+    if (!chars) return {};
+    std::string result(chars);
+    env->ReleaseStringUTFChars(value, chars);
+    return result;
+}
+
 static std::vector<jchar> take_utf16_prefix(std::string & pending) {
     std::vector<jchar> out;
     size_t i = 0;
     while (i < pending.size()) {
         const unsigned char c = static_cast<unsigned char>(pending[i]);
-        uint32_t cp = 0;
-        size_t len = 0;
+        uint32_t cp = 0; size_t len = 0;
         if (c <= 0x7F) { cp = c; len = 1; }
         else if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; len = 2; }
         else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; len = 3; }
@@ -45,19 +51,21 @@ static std::vector<jchar> take_utf16_prefix(std::string & pending) {
             out.push_back(0xFFFD); ++i; continue;
         }
         if (cp <= 0xFFFF) out.push_back(static_cast<jchar>(cp));
-        else {
-            cp -= 0x10000;
-            out.push_back(static_cast<jchar>(0xD800 + (cp >> 10)));
-            out.push_back(static_cast<jchar>(0xDC00 + (cp & 0x3FF)));
-        }
+        else { cp -= 0x10000; out.push_back(static_cast<jchar>(0xD800 + (cp >> 10))); out.push_back(static_cast<jchar>(0xDC00 + (cp & 0x3FF))); }
         i += len;
     }
     pending.erase(0, i);
     return out;
 }
 
-static void send_chunk(JNIEnv * env, jobject callback, jmethodID method,
-                       const std::vector<jchar> & chars, jint tokenCount) {
+static jstring to_jstring(JNIEnv * env, const std::string & value) {
+    std::string pending = value;
+    auto chars = take_utf16_prefix(pending);
+    if (!pending.empty()) chars.push_back(0xFFFD);
+    return env->NewString(chars.data(), static_cast<jsize>(chars.size()));
+}
+
+static void send_chunk(JNIEnv * env, jobject callback, jmethodID method, const std::vector<jchar> & chars, jint tokenCount) {
     if (!callback || !method || chars.empty()) return;
     jstring chunk = env->NewString(chars.data(), static_cast<jsize>(chars.size()));
     if (!chunk) return;
@@ -69,11 +77,11 @@ static void send_chunk(JNIEnv * env, jobject callback, jmethodID method,
 extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeVersion(JNIEnv * env, jobject) {
     return env->NewStringUTF("llama.cpp / arm64 CPU");
 }
+
 extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeLoad(JNIEnv * env, jobject, jstring path_, jint contextSize) {
     const char * path = env->GetStringUTFChars(path_, nullptr);
     std::lock_guard<std::mutex> lock(g_mutex);
-    release_locked();
-    llama_backend_init();
+    release_locked(); llama_backend_init();
     auto mp = llama_model_default_params(); mp.n_gpu_layers = 0;
     g_model = llama_model_load_from_file(path, mp);
     env->ReleaseStringUTFChars(path_, path);
@@ -87,13 +95,51 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeLoad(JNIE
     llama_sampler_chain_add(g_sampler, llama_sampler_init_greedy());
     return env->NewStringUTF("OK");
 }
+
+// Formats role/content messages with the model's GGUF chat template.
+// If llama.cpp cannot apply the stored template, use a transparent plain-text fallback.
+extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeFormatChat(JNIEnv * env, jobject, jobjectArray roles, jobjectArray contents) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (!g_model || !roles || !contents) return env->NewStringUTF("ERROR: Load a model before formatting chat.");
+    const jsize count = std::min(env->GetArrayLength(roles), env->GetArrayLength(contents));
+    std::vector<std::string> roleStrings, contentStrings;
+    std::vector<llama_chat_message> chat;
+    roleStrings.reserve(count); contentStrings.reserve(count); chat.reserve(count);
+    for (jsize i = 0; i < count; ++i) {
+        auto role = static_cast<jstring>(env->GetObjectArrayElement(roles, i));
+        auto content = static_cast<jstring>(env->GetObjectArrayElement(contents, i));
+        roleStrings.push_back(java_string(env, role));
+        contentStrings.push_back(java_string(env, content));
+        if (role) env->DeleteLocalRef(role);
+        if (content) env->DeleteLocalRef(content);
+    }
+    for (jsize i = 0; i < count; ++i) chat.push_back({roleStrings[i].c_str(), contentStrings[i].c_str()});
+    const char * tmpl = llama_model_chat_template(g_model, nullptr);
+    if (tmpl) {
+        std::vector<char> buffer(65536);
+        int32_t written = llama_chat_apply_template(tmpl, chat.data(), chat.size(), true, buffer.data(), static_cast<int32_t>(buffer.size()));
+        if (written >= 0 && written < static_cast<int32_t>(buffer.size())) return to_jstring(env, std::string(buffer.data(), static_cast<size_t>(written)));
+        if (written > 0 && written <= 1024 * 1024) {
+            buffer.resize(static_cast<size_t>(written) + 1);
+            written = llama_chat_apply_template(tmpl, chat.data(), chat.size(), true, buffer.data(), static_cast<int32_t>(buffer.size()));
+            if (written >= 0 && written < static_cast<int32_t>(buffer.size())) return to_jstring(env, std::string(buffer.data(), static_cast<size_t>(written)));
+        }
+    }
+    std::string fallback;
+    for (jsize i = 0; i < count; ++i) {
+        fallback += roleStrings[i] + ": " + contentStrings[i] + "\n\n";
+    }
+    fallback += "Assistant:";
+    return to_jstring(env, fallback);
+}
+
 extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(JNIEnv * env, jobject, jstring prompt_, jint maxTokens, jobject callback) {
     const char * prompt = env->GetStringUTFChars(prompt_, nullptr);
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_model || !g_ctx || !g_sampler) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: No model is loaded."); }
     llama_memory_clear(llama_get_memory(g_ctx), true);
     const llama_vocab * vocab = llama_model_get_vocab(g_model);
-    const int32_t needed = -llama_tokenize(vocab, prompt, (int32_t)strlen(prompt), nullptr, 0, true, false);
+    const int32_t needed = -llama_tokenize(vocab, prompt, static_cast<int32_t>(strlen(prompt)), nullptr, 0, true, false);
     if (needed <= 0 || needed > 32768) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: Prompt is empty or too large."); }
     std::vector<llama_token> tokens(static_cast<size_t>(needed));
     const int32_t count = llama_tokenize(vocab, prompt, static_cast<int32_t>(strlen(prompt)), tokens.data(), needed, true, false);
@@ -102,19 +148,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
     tokens.resize(static_cast<size_t>(count));
     auto batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
     if (llama_decode(g_ctx, batch) != 0) return env->NewStringUTF("ERROR: Prompt evaluation failed; reduce context.");
-
     jmethodID callbackMethod = nullptr;
     if (callback) {
         jclass cls = env->GetObjectClass(callback);
-        if (cls) {
-            callbackMethod = env->GetMethodID(cls, "onToken", "(Ljava/lang/String;I)V");
-            env->DeleteLocalRef(cls);
-        }
+        if (cls) { callbackMethod = env->GetMethodID(cls, "onToken", "(Ljava/lang/String;I)V"); env->DeleteLocalRef(cls); }
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
-
-    std::string output;
-    std::string pendingUtf8;
+    std::string output, pendingUtf8;
     std::vector<char> piece(16 * 1024);
     jint generatedTokens = 0;
     const int limit = std::clamp(static_cast<int>(maxTokens), 1, 2048);
@@ -126,19 +166,20 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
         if (n > 0) {
             output.append(piece.data(), static_cast<size_t>(n));
             pendingUtf8.append(piece.data(), static_cast<size_t>(n));
-            auto chars = take_utf16_prefix(pendingUtf8);
-            send_chunk(env, callback, callbackMethod, chars, generatedTokens);
+            send_chunk(env, callback, callbackMethod, take_utf16_prefix(pendingUtf8), generatedTokens);
         }
         llama_token nextToken = token;
         auto nextBatch = llama_batch_get_one(&nextToken, 1);
         if (llama_decode(g_ctx, nextBatch) != 0) break;
     }
     if (!pendingUtf8.empty()) {
+        output += "\xEF\xBF\xBD";
         std::vector<jchar> replacement(1, static_cast<jchar>(0xFFFD));
         send_chunk(env, callback, callbackMethod, replacement, generatedTokens);
     }
-    return env->NewStringUTF(output.c_str());
+    return to_jstring(env, output);
 }
+
 extern "C" JNIEXPORT void JNICALL Java_com_amz_ai_NativeLlama_nativeUnload(JNIEnv *, jobject) {
     std::lock_guard<std::mutex> lock(g_mutex); release_locked();
 }

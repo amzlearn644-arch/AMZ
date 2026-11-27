@@ -172,7 +172,7 @@ private fun AMZApp() {
                                             generating = true
                                             scope.launch {
                                                 val started = System.currentTimeMillis()
-                                                val prompt = ConversationPromptBuilder.build(messages.toList(), mode)
+                                                val prompt = inference.formatPrompt(messages.toList(), mode)
                                                 messages.add(ChatMessage("", false))
                                                 val answerIndex = messages.lastIndex
                                                 var outputTokens = 0
