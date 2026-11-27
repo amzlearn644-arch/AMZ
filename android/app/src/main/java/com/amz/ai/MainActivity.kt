@@ -59,6 +59,14 @@ private fun AMZApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val repo = remember { ModelRepository(context) }
     val chatHistory = remember { ChatHistoryRepository(context) }
+    val initialConversations = remember { chatHistory.loadConversations() }
+    var conversations by remember { mutableStateOf(initialConversations) }
+    var activeConversationId by remember { mutableStateOf(initialConversations.first().id) }
+    var conversationMenuExpanded by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<Conversation?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var deleteTarget by remember { mutableStateOf<Conversation?>(null) }
+    val activeConversation = conversations.firstOrNull { it.id == activeConversationId } ?: conversations.first()
     val palRepository = remember { PalRepository(context) }
     var pals by remember { mutableStateOf(palRepository.load()) }
     var activePalId by remember { mutableStateOf(palRepository.activeId()) }
@@ -86,18 +94,40 @@ private fun AMZApp() {
     var repeatPenalty by remember { mutableFloatStateOf(initialSettings.repeatPenalty) }
     var showClearHistory by remember { mutableStateOf(false) }
     val messages = remember {
-        mutableStateListOf<ChatMessage>().apply {
-            val saved = chatHistory.load()
-            if (saved.isEmpty()) add(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false))
-            else addAll(saved)
-        }
+        mutableStateListOf<ChatMessage>().apply { addAll(activeConversation.messages) }
     }
     LaunchedEffect(contextSize, temperature, topP, topK, repeatPenalty) {
         withContext(Dispatchers.IO) { settingsRepository.save(AppSettings(contextSize, temperature, topP, topK, repeatPenalty)) }
     }
     val historySnapshot = messages.joinToString("\u001e") { (if (it.user) "U" else "A") + it.text }
-    LaunchedEffect(historySnapshot) {
-        withContext(Dispatchers.IO) { chatHistory.save(messages.toList()) }
+    LaunchedEffect(historySnapshot, activeConversationId) {
+        conversations = conversations.map { conversation ->
+            if (conversation.id == activeConversationId) conversation.copy(messages = messages.toList(), updatedAt = System.currentTimeMillis()) else conversation
+        }
+        withContext(Dispatchers.IO) { chatHistory.saveConversations(conversations) }
+    }
+    fun switchConversation(conversation: Conversation) {
+        if (generating || conversation.id == activeConversationId) return
+        conversations = conversations.map { current ->
+            if (current.id == activeConversationId) current.copy(messages = messages.toList(), updatedAt = System.currentTimeMillis()) else current
+        }
+        activeConversationId = conversation.id
+        messages.clear()
+        messages.addAll(conversation.messages)
+        draft = ""
+    }
+    fun createConversation() {
+        if (generating) return
+        conversations = conversations.map { current ->
+            if (current.id == activeConversationId) current.copy(messages = messages.toList(), updatedAt = System.currentTimeMillis()) else current
+        }
+        val fresh = Conversation.create()
+        conversations = listOf(fresh) + conversations
+        activeConversationId = fresh.id
+        messages.clear()
+        messages.add(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false))
+        draft = ""
+        conversationMenuExpanded = false
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -118,7 +148,6 @@ private fun AMZApp() {
                 TextButton(onClick = {
                     messages.clear()
                     messages.add(ChatMessage("گفتگوی تازه شروع شد. پیام بده تا با هم ادامه بدهیم.", false))
-                    scope.launch(Dispatchers.IO) { chatHistory.clear() }
                     showClearHistory = false
                 }) { Text("پاک کردن", color = Color(0xFFFF7777)) }
             },
@@ -126,6 +155,53 @@ private fun AMZApp() {
             containerColor = Panel,
             titleContentColor = White,
             textContentColor = Muted
+        )
+    }
+    if (renameTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("تغییر نام گفتگو") },
+            text = {
+                BasicTextField(
+                    value = renameText, onValueChange = { renameText = it.take(48) },
+                    modifier = Modifier.fillMaxWidth().background(Surface2, RoundedCornerShape(10.dp)).padding(12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = White, fontSize = 14.sp), singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = renameTarget
+                    val title = renameText.trim()
+                    if (target != null && title.isNotEmpty()) conversations = conversations.map { if (it.id == target.id) it.copy(title = title) else it }
+                    renameTarget = null
+                }) { Text("ذخیره", color = Accent) }
+            },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("انصراف") } },
+            containerColor = Panel, titleContentColor = White
+        )
+    }
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("حذف گفتگو؟") },
+            text = { Text("پیام‌های این گفتگو برای همیشه از حافظه برنامه حذف می‌شوند.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = deleteTarget
+                    if (target != null && conversations.size > 1) {
+                        val remaining = conversations.filterNot { it.id == target.id }
+                        conversations = remaining
+                        if (activeConversationId == target.id) {
+                            activeConversationId = remaining.first().id
+                            messages.clear()
+                            messages.addAll(remaining.first().messages)
+                        }
+                    }
+                    deleteTarget = null
+                }) { Text("حذف", color = Color(0xFFFF7777)) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("انصراف") } },
+            containerColor = Panel, titleContentColor = White
         )
     }
     Scaffold(containerColor = Bg, bottomBar = {
@@ -139,7 +215,45 @@ private fun AMZApp() {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("AMZ AI", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = White)
-                    Text(if (tab == "Chat") "Your private AI space" else tab, color = Muted, fontSize = 12.sp)
+                    Text(if (tab == "Chat") activeConversation.title else tab, color = Muted, fontSize = 12.sp, maxLines = 1)
+                }
+                if (tab == "Chat") {
+                    Box {
+                        IconButton(onClick = { conversationMenuExpanded = true }, enabled = !generating) {
+                            Icon(Icons.Default.Forum, "Conversations", tint = Accent)
+                        }
+                        DropdownMenu(expanded = conversationMenuExpanded, onDismissRequest = { conversationMenuExpanded = false }, modifier = Modifier.background(Panel)) {
+                            DropdownMenuItem(
+                                text = { Text("گفتگوی جدید", color = Accent) },
+                                leadingIcon = { Icon(Icons.Default.Add, null, tint = Accent) },
+                                onClick = { createConversation() }, enabled = !generating
+                            )
+                            HorizontalDivider(color = Surface2)
+                            conversations.forEach { conversation ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(conversation.title, color = if (conversation.id == activeConversationId) Accent else White, maxLines = 1)
+                                            Text("${conversation.messages.count { it.user }} پیام", color = Muted, fontSize = 10.sp)
+                                        }
+                                    },
+                                    leadingIcon = { Icon(if (conversation.id == activeConversationId) Icons.Default.CheckCircle else Icons.Default.ChatBubbleOutline, null, tint = if (conversation.id == activeConversationId) Accent else Muted) },
+                                    trailingIcon = {
+                                        Row {
+                                            IconButton(onClick = { renameTarget = conversation; renameText = conversation.title; conversationMenuExpanded = false }) {
+                                                Icon(Icons.Default.Edit, "Rename", tint = Muted)
+                                            }
+                                            if (conversations.size > 1) IconButton(onClick = { deleteTarget = conversation; conversationMenuExpanded = false }) {
+                                                Icon(Icons.Default.DeleteOutline, "Delete", tint = Color(0xFFFF7777))
+                                            }
+                                        }
+                                    },
+                                    onClick = { switchConversation(conversation); conversationMenuExpanded = false },
+                                    enabled = !generating
+                                )
+                            }
+                        }
+                    }
                 }
                 Surface(color = Surface2, shape = CircleShape) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
