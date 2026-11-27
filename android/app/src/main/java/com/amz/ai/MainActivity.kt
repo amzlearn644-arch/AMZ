@@ -73,6 +73,10 @@ private fun AMZApp() {
     var modelLoaded by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
     var contextSize by remember { mutableIntStateOf(2048) }
+    var temperature by remember { mutableFloatStateOf(0.7f) }
+    var topP by remember { mutableFloatStateOf(0.9f) }
+    var topK by remember { mutableIntStateOf(40) }
+    var repeatPenalty by remember { mutableFloatStateOf(1.1f) }
     var showClearHistory by remember { mutableStateOf(false) }
     val messages = remember {
         mutableStateListOf<ChatMessage>().apply {
@@ -177,7 +181,7 @@ private fun AMZApp() {
                                                 val answerIndex = messages.lastIndex
                                                 var outputTokens = 0
                                                 val result = runCatching {
-                                                    inference.generate(prompt, 256) { chunk, generatedTokenCount ->
+                                                    inference.generate(prompt, 256, SamplingSettings(temperature, topP, topK, repeatPenalty)) { chunk, generatedTokenCount ->
                                                         outputTokens = generatedTokenCount
                                                         val current = messages.getOrNull(answerIndex)
                                                         if (current != null) messages[answerIndex] = current.copy(text = current.text + chunk)

@@ -10,10 +10,9 @@
 static std::mutex g_mutex;
 static llama_model * g_model = nullptr;
 static llama_context * g_ctx = nullptr;
-static llama_sampler * g_sampler = nullptr;
+
 
 static void release_locked() {
-    if (g_sampler) { llama_sampler_free(g_sampler); g_sampler = nullptr; }
     if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
     if (g_model) { llama_model_free(g_model); g_model = nullptr; }
 }
@@ -91,8 +90,6 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeLoad(JNIE
     cp.n_batch = std::min<uint32_t>(cp.n_ctx, 2048);
     g_ctx = llama_init_from_model(g_model, cp);
     if (!g_ctx) { release_locked(); return env->NewStringUTF("ERROR: Context allocation failed. Try a smaller context."); }
-    g_sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(g_sampler, llama_sampler_init_greedy());
     return env->NewStringUTF("OK");
 }
 
@@ -133,10 +130,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeFormatCha
     return to_jstring(env, fallback);
 }
 
-extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(JNIEnv * env, jobject, jstring prompt_, jint maxTokens, jobject callback) {
+extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(JNIEnv * env, jobject, jstring prompt_, jint maxTokens, jfloat temperature, jfloat topP, jint topK, jfloat repeatPenalty, jobject callback) {
     const char * prompt = env->GetStringUTFChars(prompt_, nullptr);
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (!g_model || !g_ctx || !g_sampler) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: No model is loaded."); }
+    if (!g_model || !g_ctx) { env->ReleaseStringUTFChars(prompt_, prompt); return env->NewStringUTF("ERROR: No model is loaded."); }
     llama_memory_clear(llama_get_memory(g_ctx), true);
     const llama_vocab * vocab = llama_model_get_vocab(g_model);
     const int32_t needed = -llama_tokenize(vocab, prompt, static_cast<int32_t>(strlen(prompt)), nullptr, 0, true, false);
@@ -159,7 +156,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
     jint generatedTokens = 0;
     const int limit = std::clamp(static_cast<int>(maxTokens), 1, 2048);
     for (int i = 0; i < limit; ++i) {
-        const llama_token token = llama_sampler_sample(g_sampler, g_ctx, -1);
+        const llama_token token = llama_sampler_sample(sampler, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
         ++generatedTokens;
         const int32_t n = llama_token_to_piece(vocab, token, piece.data(), static_cast<int32_t>(piece.size()), 0, true);

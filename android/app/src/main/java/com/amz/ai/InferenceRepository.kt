@@ -3,6 +3,13 @@ package com.amz.ai
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class SamplingSettings(
+    val temperature: Float = 0.7f,
+    val topP: Float = 0.9f,
+    val topK: Int = 40,
+    val repeatPenalty: Float = 1.1f
+)
+
 class InferenceRepository {
     suspend fun load(path: String, contextSize: Int = 2048): String =
         withContext(Dispatchers.IO) { NativeLlama.nativeLoad(path, contextSize) }
@@ -29,11 +36,11 @@ class InferenceRepository {
     suspend fun generate(
         prompt: String,
         maxTokens: Int = 256,
+        settings: SamplingSettings = SamplingSettings(),
         onToken: (String, Int) -> Unit
     ): String = withContext(Dispatchers.IO) {
         NativeLlama.nativeGenerate(
-            prompt,
-            maxTokens,
+            prompt, maxTokens, settings.temperature, settings.topP, settings.topK, settings.repeatPenalty,
             object : TokenCallback {
                 override fun onToken(token: String, generatedTokenCount: Int) {
                     onToken.invoke(token, generatedTokenCount)
