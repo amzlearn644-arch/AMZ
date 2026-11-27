@@ -142,8 +142,8 @@ private fun AMZApp() {
                                                 val answerIndex = messages.lastIndex
                                                 var outputTokens = 0
                                                 val result = runCatching {
-                                                    inference.generate(prompt, 256) { chunk ->
-                                                        outputTokens++
+                                                    inference.generate(prompt, 256) { chunk, generatedTokenCount ->
+                                                        outputTokens = generatedTokenCount
                                                         val current = messages.getOrNull(answerIndex)
                                                         if (current != null) messages[answerIndex] = current.copy(text = current.text + chunk)
                                                     }
@@ -152,7 +152,7 @@ private fun AMZApp() {
                                                 result.onSuccess { answer ->
                                                     val current = messages.getOrNull(answerIndex)
                                                     if (current != null && answer.startsWith("ERROR:")) messages[answerIndex] = current.copy(text = answer)
-                                                    else if (current != null) messages[answerIndex] = current.copy(text = current.text + "\\n\\n" + outputTokens + " tokens · " + "%.1f".format(seconds) + "s")
+                                                    else if (current != null) messages[answerIndex] = current.copy(text = current.text + "\\n\\n" + outputTokens + " output tokens · " + (if (seconds > 0) "%.1f".format(outputTokens / seconds) + " tok/s · " else "") + "%.1f".format(seconds) + "s")
                                                 }.onFailure { err ->
                                                     val current = messages.getOrNull(answerIndex)
                                                     if (current != null) messages[answerIndex] = current.copy(text = "خطای اجرای مدل: " + (err.message ?: "unknown"))

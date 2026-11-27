@@ -7,4 +7,7 @@ object NativeLlama {
     external fun nativeGenerate(prompt: String, maxTokens: Int, callback: TokenCallback?): String
     external fun nativeUnload()
 }
-interface TokenCallback { fun onToken(token: String) }
+
+interface TokenCallback {
+    fun onToken(token: String, generatedTokenCount: Int)
+}
