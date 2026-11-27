@@ -145,6 +145,22 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
     tokens.resize(static_cast<size_t>(count));
     auto batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
     if (llama_decode(g_ctx, batch) != 0) return env->NewStringUTF("ERROR: Prompt evaluation failed; reduce context.");
+    auto samplerParams = llama_sampler_chain_default_params();
+    llama_sampler * sampler = llama_sampler_chain_init(samplerParams);
+    if (!sampler) return env->NewStringUTF("ERROR: Sampler initialization failed.");
+    if (repeatPenalty > 1.0f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, repeatPenalty, 0.0f, 0.0f));
+    }
+    if (topK > 0) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::clamp(static_cast<int>(topK), 1, 1000)));
+    }
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(std::clamp(topP, 0.05f, 1.0f), 1));
+    if (temperature <= 0.01f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    } else {
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(std::clamp(temperature, 0.05f, 2.0f)));
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+    }
     jmethodID callbackMethod = nullptr;
     if (callback) {
         jclass cls = env->GetObjectClass(callback);
@@ -174,6 +190,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
         std::vector<jchar> replacement(1, static_cast<jchar>(0xFFFD));
         send_chunk(env, callback, callbackMethod, replacement, generatedTokens);
     }
+    llama_sampler_free(sampler);
     return to_jstring(env, output);
 }
 
