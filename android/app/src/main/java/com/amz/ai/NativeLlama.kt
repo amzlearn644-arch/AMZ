@@ -14,6 +14,9 @@ object NativeLlama {
         repeatPenalty: Float,
         callback: TokenCallback?
     ): String
+    external fun nativeBeginGeneration()
+    external fun nativeCancelGeneration()
+    external fun nativeWasGenerationCancelled(): Boolean
     external fun nativeUnload()
 }
 
