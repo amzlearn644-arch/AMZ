@@ -14,13 +14,15 @@ class InferenceRepository {
     suspend fun load(path: String, contextSize: Int = 2048): String =
         withContext(Dispatchers.IO) { NativeLlama.nativeLoad(path, contextSize) }
 
-    suspend fun formatPrompt(messages: List<ChatMessage>, mode: String): String =
+    suspend fun formatPrompt(messages: List<ChatMessage>, mode: String, customSystemPrompt: String? = null): String =
         withContext(Dispatchers.IO) {
-            val system = if (mode == "Think") {
+            val baseSystem = if (mode == "Think") {
                 "You are AMZ AI. Think carefully before answering. Give a clear, useful final answer. Do not reveal hidden chain-of-thought; provide concise reasoning summaries when useful."
             } else {
                 "You are AMZ AI. Answer helpfully, accurately, and directly. Prefer concise answers unless detail is needed."
             }
+            val system = if (customSystemPrompt.isNullOrBlank()) baseSystem else
+                "$baseSystem\n\nFollow this selected Pal personality and instructions: $customSystemPrompt"
             val recent = messages.filter { it.text.isNotBlank() }.takeLast(12)
             val roles = ArrayList<String>(recent.size + 1)
             val contents = ArrayList<String>(recent.size + 1)
