@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A monogram -->
+    <path
+        android:fillColor="#F7F8FF"
+        android:fillType="evenOdd"
+        android:pathData="M54,20 L84,84 L70,84 L62.5,67.5 L45.5,67.5 L38,84 L24,84 Z M54,43 L49.5,57 L58.5,57 Z" />
+    <!-- A restrained cyan-to-violet signature stroke -->
+    <path
+        android:fillColor="#00D8F5"
+        android:pathData="M27,79 C40,70 54,59 82,54 C65,61 52,71 42,80 C36,85 30,85 27,79 Z" />
+</vector>
