@@ -1,16 +1,15 @@
 # AMZ AI for Android
 
-## 0.4.0 — Streaming and generation metrics
-- Kotlin + Jetpack Compose application with a dark, rounded chat interface.
-- GGUF model discovery on Hugging Face, download, local import and installed-model listing.
-- llama.cpp native runtime connected through JNI for arm64-v8a CPU inference.
-- Token streaming uses UTF-8-aware buffering and converts complete code points to Java UTF-16.
-- Native generation reports the actual number of sampled output tokens; the UI can calculate tokens/second and elapsed time.
-- Fast/Think are still preliminary modes and do not yet configure distinct sampler profiles or guarantee reasoning behavior.
-- GPU acceleration, model-specific chat templates, persistent chat history, Pals, voice and remote providers are not complete yet.
-
-Initialize the llama.cpp submodule:
-`git submodule update --init --recursive`
+## 0.5.0 — Persistent conversations
+- Kotlin + Jetpack Compose dark chat UI.
+- Hugging Face GGUF discovery, download and local import.
+- llama.cpp native arm64 CPU inference through JNI.
+- UTF-8-aware token streaming and sampled-token count / generation timing.
+- Local conversation persistence (up to 200 messages) and clear-chat confirmation.
+- Prompt builder includes recent conversation turns (last 12 messages) and applies distinct Fast/Think system instructions.
+- The prompt format is currently a generic role-labelled fallback, not yet the model's native GGUF chat template.
+- GPU acceleration, full sampler controls, Pals, voice and remote providers are not complete.
 
 Build with JDK 17, Android SDK 35, NDK 27.2.12479018 and CMake 3.22.1.
-Start with a small quantized GGUF and context 2048. Validate on a physical arm64 device; large models may exceed RAM. Not production-ready yet.
+Initialize llama.cpp: `git submodule update --init --recursive`
+Start with a small quantized GGUF and context 2048. Test on a physical arm64 phone; model RAM needs vary.

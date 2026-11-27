@@ -26,6 +26,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 
 private val Bg = Color(0xFF090A0D)
 private val Panel = Color(0xFF15171D)
@@ -50,12 +53,11 @@ private fun AMZTheme(content: @Composable () -> Unit) {
     ), content = content)
 }
 
-private data class ChatMessage(val text: String, val user: Boolean)
-
 @Composable
 private fun AMZApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val repo = remember { ModelRepository(context) }
+    val chatHistory = remember { ChatHistoryRepository(context) }
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Chat") }
     var mode by remember { mutableStateOf("Fast") }
@@ -71,7 +73,18 @@ private fun AMZApp() {
     var modelLoaded by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
     var contextSize by remember { mutableIntStateOf(2048) }
-    val messages = remember { mutableStateListOf(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false)) }
+    var showClearHistory by remember { mutableStateOf(false) }
+    val messages = remember {
+        mutableStateListOf<ChatMessage>().apply {
+            val saved = chatHistory.load()
+            if (saved.isEmpty()) add(ChatMessage("سلام! برای اجرای آفلاین، ابتدا یک مدل GGUF وارد یا دانلود کن.", false))
+            else addAll(saved)
+        }
+    }
+    val historySnapshot = messages.joinToString("\u001e") { (if (it.user) "U" else "A") + it.text }
+    LaunchedEffect(historySnapshot) {
+        withContext(Dispatchers.IO) { chatHistory.save(messages.toList()) }
+    }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             loading = true
@@ -81,6 +94,25 @@ private fun AMZApp() {
                 .onFailure { status = it.message ?: "خطا در وارد کردن مدل" }
             loading = false
         }
+    }
+    if (showClearHistory) {
+        AlertDialog(
+            onDismissRequest = { showClearHistory = false },
+            title = { Text("پاک کردن گفتگو؟") },
+            text = { Text("تمام پیام‌های ذخیره‌شده این گفتگو حذف می‌شوند.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    messages.clear()
+                    messages.add(ChatMessage("گفتگوی تازه شروع شد. پیام بده تا با هم ادامه بدهیم.", false))
+                    scope.launch(Dispatchers.IO) { chatHistory.clear() }
+                    showClearHistory = false
+                }) { Text("پاک کردن", color = Color(0xFFFF7777)) }
+            },
+            dismissButton = { TextButton(onClick = { showClearHistory = false }) { Text("انصراف") } },
+            containerColor = Panel,
+            titleContentColor = White,
+            textContentColor = Muted
+        )
     }
     Scaffold(containerColor = Bg, bottomBar = {
         NavigationBar(containerColor = Panel, contentColor = White) {
@@ -101,6 +133,9 @@ private fun AMZApp() {
                         Spacer(Modifier.width(7.dp))
                         Text("LOCAL FIRST", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+                if (tab == "Chat" && messages.size > 1) {
+                    IconButton(onClick = { showClearHistory = true }) { Icon(Icons.Default.Delete, "Clear chat", tint = Muted) }
                 }
             }
             when (tab) {
@@ -137,7 +172,7 @@ private fun AMZApp() {
                                             generating = true
                                             scope.launch {
                                                 val started = System.currentTimeMillis()
-                                                val prompt = if (mode == "Think") "Think carefully and reason through the task before answering.\\n\\nUser: $text\\nAssistant:" else "User: $text\\nAssistant:"
+                                                val prompt = ConversationPromptBuilder.build(messages.toList(), mode)
                                                 messages.add(ChatMessage("", false))
                                                 val answerIndex = messages.lastIndex
                                                 var outputTokens = 0
