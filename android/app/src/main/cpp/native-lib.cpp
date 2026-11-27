@@ -5,11 +5,13 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdint>
+#include <atomic>
 #include "llama.h"
 
 static std::mutex g_mutex;
 static llama_model * g_model = nullptr;
 static llama_context * g_ctx = nullptr;
+static std::atomic<bool> g_cancel_requested{false};
 
 
 static void release_locked() {
@@ -71,6 +73,18 @@ static void send_chunk(JNIEnv * env, jobject callback, jmethodID method, const s
     env->CallVoidMethod(callback, method, chunk, tokenCount);
     env->DeleteLocalRef(chunk);
     if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_amz_ai_NativeLlama_nativeBeginGeneration(JNIEnv *, jobject) {
+    g_cancel_requested.store(false, std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_com_amz_ai_NativeLlama_nativeCancelGeneration(JNIEnv *, jobject) {
+    g_cancel_requested.store(true, std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_com_amz_ai_NativeLlama_nativeWasGenerationCancelled(JNIEnv *, jobject) {
+    return g_cancel_requested.load(std::memory_order_relaxed) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeVersion(JNIEnv * env, jobject) {
@@ -171,7 +185,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_amz_ai_NativeLlama_nativeGenerate(
     std::vector<char> piece(16 * 1024);
     jint generatedTokens = 0;
     const int limit = std::clamp(static_cast<int>(maxTokens), 1, 2048);
-    for (int i = 0; i < limit; ++i) {
+    for (int i = 0; i < limit && !g_cancel_requested.load(std::memory_order_relaxed); ++i) {
         const llama_token token = llama_sampler_sample(sampler, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
         ++generatedTokens;
