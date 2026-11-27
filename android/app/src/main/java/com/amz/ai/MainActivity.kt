@@ -104,6 +104,8 @@ private fun AMZApp() {
         conversations = conversations.map { conversation ->
             if (conversation.id == activeConversationId) conversation.copy(messages = messages.toList(), updatedAt = System.currentTimeMillis()) else conversation
         }
+    }
+    LaunchedEffect(conversations) {
         withContext(Dispatchers.IO) { chatHistory.saveConversations(conversations) }
     }
     fun switchConversation(conversation: Conversation) {
