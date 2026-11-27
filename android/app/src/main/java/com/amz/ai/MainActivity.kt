@@ -292,41 +292,58 @@ private fun AMZApp() {
                                 IconButton(onClick = { tab = "Models" }) { Icon(Icons.Default.Add, null, tint = Muted) }
                                 Text("Model & tools", color = Muted, fontSize = 11.sp)
                                 Spacer(Modifier.weight(1f))
-                                IconButton(onClick = {
-                                    val text = draft.trim()
-                                    if (text.isNotEmpty() && !generating) {
-                                        messages.add(ChatMessage(text, true)); draft = ""
-                                        if (!modelLoaded) {
-                                            messages.add(ChatMessage("ابتدا یک مدل را از بخش Models بارگذاری کن.", false))
-                                        } else {
-                                            generating = true
-                                            scope.launch {
-                                                val started = System.currentTimeMillis()
-                                                val prompt = inference.formatPrompt(messages.toList(), mode, activePal?.systemPrompt)
-                                                messages.add(ChatMessage("", false))
-                                                val answerIndex = messages.lastIndex
-                                                var outputTokens = 0
-                                                val result = runCatching {
-                                                    inference.generate(prompt, 256, SamplingSettings(temperature, topP, topK, repeatPenalty)) { chunk, generatedTokenCount ->
-                                                        outputTokens = generatedTokenCount
-                                                        val current = messages.getOrNull(answerIndex)
-                                                        if (current != null) messages[answerIndex] = current.copy(text = current.text + chunk)
+                                if (generating) {
+                                    IconButton(onClick = {
+                                        inference.cancelGeneration()
+                                        status = "درخواست توقف ارسال شد…"
+                                    }) {
+                                        Icon(Icons.Default.StopCircle, "Stop generation", tint = Color(0xFFFF7777))
+                                    }
+                                } else {
+                                    IconButton(onClick = {
+                                        val text = draft.trim()
+                                        if (text.isNotEmpty()) {
+                                            messages.add(ChatMessage(text, true)); draft = ""
+                                            if (!modelLoaded) {
+                                                messages.add(ChatMessage("ابتدا یک مدل را از بخش Models بارگذاری کن.", false))
+                                            } else {
+                                                generating = true
+                                                inference.beginGeneration()
+                                                scope.launch {
+                                                    val started = System.currentTimeMillis()
+                                                    val prompt = inference.formatPrompt(messages.toList(), mode, activePal?.systemPrompt)
+                                                    messages.add(ChatMessage("", false))
+                                                    val answerIndex = messages.lastIndex
+                                                    var outputTokens = 0
+                                                    val result = runCatching {
+                                                        inference.generate(prompt, 256, SamplingSettings(temperature, topP, topK, repeatPenalty)) { chunk, generatedTokenCount ->
+                                                            outputTokens = generatedTokenCount
+                                                            val current = messages.getOrNull(answerIndex)
+                                                            if (current != null) messages[answerIndex] = current.copy(text = current.text + chunk)
+                                                        }
                                                     }
+                                                    val seconds = (System.currentTimeMillis() - started) / 1000.0
+                                                    result.onSuccess { answer ->
+                                                        val current = messages.getOrNull(answerIndex)
+                                                        if (current != null && answer.startsWith("ERROR:")) messages[answerIndex] = current.copy(text = answer)
+                                                        else if (current != null) {
+                                                            val cancelled = inference.wasGenerationCancelled()
+                                                            val metrics = outputTokens.toString() + " output tokens · " + (if (seconds > 0) "%.1f".format(outputTokens / seconds) + " tok/s · " else "") + "%.1f".format(seconds) + "s"
+                                                            val ending = if (cancelled) "⏹ متوقف شد · " + metrics else metrics
+                                                            messages[answerIndex] = current.copy(text = current.text + "\\n\\n" + ending)
+                                                        }
+                                                    }.onFailure { err ->
+                                                        val current = messages.getOrNull(answerIndex)
+                                                        if (current != null) messages[answerIndex] = current.copy(text = "خطای اجرای مدل: " + (err.message ?: "unknown"))
+                                                    }
+                                                    generating = false
                                                 }
-                                                val seconds = (System.currentTimeMillis() - started) / 1000.0
-                                                result.onSuccess { answer ->
-                                                    val current = messages.getOrNull(answerIndex)
-                                                    if (current != null && answer.startsWith("ERROR:")) messages[answerIndex] = current.copy(text = answer)
-                                                    else if (current != null) messages[answerIndex] = current.copy(text = current.text + "\\n\\n" + outputTokens + " output tokens · " + (if (seconds > 0) "%.1f".format(outputTokens / seconds) + " tok/s · " else "") + "%.1f".format(seconds) + "s")
-                                                }.onFailure { err ->
-                                                    val current = messages.getOrNull(answerIndex)
-                                                    if (current != null) messages[answerIndex] = current.copy(text = "خطای اجرای مدل: " + (err.message ?: "unknown"))
-                                                }
-                                                generating = false
                                             }
                                         }
+                                    }, enabled = draft.isNotBlank()) {
+                                        Icon(Icons.Default.Send, null, tint = if (draft.isNotBlank()) Accent else Muted)
                                     }
-                                }, enabled = draft.isNotBlank() && !generating) { Icon(Icons.Default.Send, null, tint = if (draft.isNotBlank()) Accent else Muted) }
+                                }
                             }
                         }
                     }
