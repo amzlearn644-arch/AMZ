@@ -59,6 +59,10 @@ private fun AMZApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val repo = remember { ModelRepository(context) }
     val chatHistory = remember { ChatHistoryRepository(context) }
+    val palRepository = remember { PalRepository(context) }
+    var pals by remember { mutableStateOf(palRepository.load()) }
+    var activePalId by remember { mutableStateOf(palRepository.activeId()) }
+    val activePal = pals.firstOrNull { it.id == activePalId }
     val settingsRepository = remember { SettingsRepository(context) }
     val initialSettings = remember { settingsRepository.load() }
     val scope = rememberCoroutineScope()
@@ -182,7 +186,7 @@ private fun AMZApp() {
                                             generating = true
                                             scope.launch {
                                                 val started = System.currentTimeMillis()
-                                                val prompt = inference.formatPrompt(messages.toList(), mode)
+                                                val prompt = inference.formatPrompt(messages.toList(), mode, activePal?.systemPrompt)
                                                 messages.add(ChatMessage("", false))
                                                 val answerIndex = messages.lastIndex
                                                 var outputTokens = 0
@@ -279,7 +283,23 @@ private fun AMZApp() {
                         }
                     }
                 }
-                "Pals" -> FeaturePage("Your Pals", "دستیارهای شخصی با شخصیت، System Prompt و تنظیمات مستقل.", listOf("Create a Pal", "Assistant presets", "Roleplay profiles"))
+                "Pals" -> PalsScreen(
+    pals = pals,
+    activePalId = activePalId,
+    onSelect = { pal ->
+        activePalId = pal?.id
+        palRepository.setActive(pal?.id)
+        status = if (pal == null) "دستیار پیش‌فرض AMZ AI انتخاب شد." else pal.name + " برای گفتگوی بعدی انتخاب شد."
+    },
+    onSave = { updated ->
+        pals = updated
+        palRepository.save(updated)
+        if (activePalId != null && updated.none { it.id == activePalId }) {
+            activePalId = null
+            palRepository.setActive(null)
+        }
+    }
+)
                 else -> SettingsPage(
                     contextSize, temperature, topP, topK, repeatPenalty,
                     onContextSizeChange = { contextSize = it },
