@@ -1,5 +1,10 @@
 # AMZ AI for Android
 
+## 0.7.0 — Rich chat rendering
+- Render Markdown-style headings, bold text and inline code in chat messages.
+- Display fenced code blocks in separate panels with a one-tap copy action.
+- Keep streaming responses readable while code fences are still being generated.
+
 ## 0.6.0 — Personal assistants (Pals)
 - Kotlin + Jetpack Compose dark chat UI.
 - Hugging Face GGUF discovery, download and local import.
