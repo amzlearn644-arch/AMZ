@@ -1,5 +1,11 @@
 # AMZ AI for Android
 
+## 0.9.0 — Stop generation
+- Stop an in-progress local model response from the chat composer.
+- Use an atomic native cancellation flag so the UI can request a stop without waiting for the inference mutex.
+- Preserve any tokens already generated and mark the response as stopped.
+- Keep the cancellation state scoped to each generation request.
+
 ## 0.8.0 — Multiple conversations
 - Create and switch between independent chat conversations.
 - Rename and delete individual conversations without affecting other chat histories.
